@@ -134,9 +134,13 @@ export const Home: React.FC = () => {
 
   return (
     <div className="page home-page">
-      <h1 className="app-title">节奏按摩引导器</h1>
+      {/* Hero: 大面积留白渲染情绪 */}
+      <div className="home-hero">
+        <h1 className="app-title">节奏按摩</h1>
+        <p className="home-subtitle">引导器</p>
+      </div>
 
-      {/* 时长选择 - Glass Card 包裹 */}
+      {/* 时长选择 - 无边框大卡片 */}
       <section className="glass-card duration-card">
         <div className="duration-display">
           <span className="stat-number duration-value">{minutes}</span>
@@ -287,8 +291,8 @@ export const Home: React.FC = () => {
         </div>
       </AccordionCard>
 
-      {/* CTA 按钮 */}
-      <button className="btn-primary btn-compile" onClick={handleCompile}>
+      {/* CTA 按钮 — 自然流，非固定定位 */}
+      <button className="btn-primary btn-compile-inline" onClick={handleCompile}>
         生成编排
       </button>
 

@@ -21,7 +21,7 @@
 .stat-value {
   display: block;
   font-size: 24px;
-  font-weight: 300;
+  font-weight: 600;
   color: var(--accent);
 }
 
@@ -45,9 +45,10 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   max-height: 40vh;
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: none;
+  border-radius: var(--radius-xl);
   padding: 4px;
+  background: var(--bg-card);
 }
 
 .preview-actions {
@@ -138,7 +139,10 @@
 /* ---- 可编辑序列 ---- */
 .edit-action-row {
   padding: 4px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.edit-action-row + .edit-action-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .edit-action-row.rest-row {
@@ -225,15 +229,16 @@
 
 .replace-btn {
   padding: 4px 10px;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 12px;
-  background: transparent;
+  background: var(--bg-card);
   color: var(--text-secondary);
   font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
 }
 
 .replace-btn:active {
-  border-color: var(--accent);
+  background: var(--accent-dim);
   color: var(--accent);
 }

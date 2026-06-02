@@ -82,7 +82,7 @@ export const Landing: React.FC = () => {
 
       {phase === 'rating' && (
         <div className="rating-section">
-          <h2>体验如何？</h2>
+          <h2 className="landing-rating-title">体验如何？</h2>
           <div className="stars">
             {[1, 2, 3, 4, 5].map(i => (
               <button

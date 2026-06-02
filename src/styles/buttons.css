@@ -72,13 +72,13 @@
   box-shadow: none;
 }
 
-/* ---- 次按钮 (Secondary / Ghost) ---- */
+/* ---- 次按钮 (Secondary / Ghost) — 去边框化 ---- */
 .btn-secondary {
   background: var(--bg-card);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   color: var(--text-primary);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius);
   padding: 12px 24px;
   font-size: 14px;
@@ -89,7 +89,6 @@
 
 .btn-secondary:hover {
   background: var(--bg-card-hover);
-  border-color: var(--border-hover);
   backdrop-filter: blur(25px);
 }
 
@@ -106,7 +105,7 @@
 .btn-danger {
   background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  border: none;
   border-radius: var(--radius);
   padding: 12px 24px;
   font-size: 14px;
@@ -116,13 +115,12 @@
 
 .btn-danger:hover {
   background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.4);
 }
 
-/* ---- Toggle / Chip 按钮 ---- */
+/* ---- Toggle / Chip 按钮 (去边框：默认无边框，仅激活态着色) ---- */
 .btn-chip {
   padding: 6px 14px;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius-full);
   background: transparent;
   color: var(--text-secondary);
@@ -132,13 +130,12 @@
 }
 
 .btn-chip.active {
-  border-color: var(--accent);
   background: var(--accent-dim);
   color: var(--accent);
 }
 
 .btn-chip:hover:not(.active) {
-  border-color: var(--border-hover);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text-primary);
 }
 
@@ -162,7 +159,7 @@
   background: var(--bg-card);
   backdrop-filter: blur(12px);
   color: var(--text-secondary);
-  border: 1px solid var(--border);
+  border: none;
   font-size: 13px;
   padding: 10px 20px;
   margin-top: var(--space);
@@ -173,7 +170,6 @@
 
 .btn-settings-toggle:hover {
   background: var(--bg-card-hover);
-  border-color: var(--border-hover);
 }
 
 .btn-start {
@@ -197,14 +193,13 @@
   background: var(--bg-card);
   backdrop-filter: blur(12px);
   color: var(--text-primary);
-  border: 1px solid var(--border);
+  border: none;
 }
 
 .btn-recompile:hover,
 .btn-skip:hover,
 .btn-cancel:hover {
   background: var(--bg-card-hover);
-  border-color: var(--border-hover);
 }
 
 .btn-save {
@@ -217,7 +212,7 @@
   background: var(--bg-card);
   backdrop-filter: blur(12px);
   color: var(--text-secondary);
-  border: 1px solid var(--border);
+  border: none;
   margin-top: var(--space-xl);
   font-size: 13px;
   padding: 10px 24px;
@@ -225,7 +220,6 @@
 
 .btn-end-early:hover {
   background: var(--bg-card-hover);
-  border-color: var(--border-hover);
 }
 
 .btn-home,
@@ -245,7 +239,7 @@
   min-height: 44px;
   min-width: 100px;
   padding: 12px 28px;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius);
   font-size: 16px;
   cursor: pointer;
@@ -254,7 +248,6 @@
 
 .btn-pause:hover {
   background: var(--bg-card-hover);
-  border-color: var(--border-hover);
 }
 
 .btn-pause:active {
@@ -268,7 +261,7 @@
   color: var(--text-secondary);
   min-height: 44px;
   min-width: 80px;
-  border: 1px solid var(--border);
+  border: none;
   padding: 12px 20px;
   border-radius: var(--radius);
   font-size: 16px;
@@ -278,7 +271,6 @@
 
 .btn-stop:hover {
   background: var(--bg-card-hover);
-  border-color: var(--border-hover);
 }
 
 .btn-stop:active {

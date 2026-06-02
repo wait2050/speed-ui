@@ -1,5 +1,6 @@
 /* ============================================================
-   Player 页：沉浸渐变背景 + 计时器 + 进度条 + 手势覆盖层 + 锁定
+   Player 页：三态系统 · 分屏手势 · 唤醒态 · 息屏态
+   The Sanctuary — Breathing Space v3.0
    ============================================================ */
 
 .player-page {
@@ -7,6 +8,7 @@
   gap: 20px;
   position: relative;
   overflow: hidden;
+  cursor: default;
 }
 
 /* 背景氛围层 - 根据阶段切换 */
@@ -15,9 +17,14 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  opacity: 0.15;
-  transition: background 1.5s var(--ease-in-out);
+  opacity: 0.12;
+  transition: background 1.5s var(--ease-in-out), opacity 1s;
   pointer-events: none;
+}
+
+/* 息屏态：背景更暗 */
+.player-page.sleep::before {
+  opacity: 0.04;
 }
 
 .player-page[data-phase="warmup"]::before {
@@ -58,7 +65,7 @@
 /* 动作名渐变色文字 */
 .player-action-name {
   font-size: 32px;
-  font-weight: 300;
+  font-weight: 600;
   text-align: center;
   line-height: 1.3;
   max-width: 320px;
@@ -94,7 +101,7 @@
   left: 50%;
   transform: translate(-50%, -50%);
   font-size: 48px;
-  font-weight: 200;
+  font-weight: 600;
   background: var(--accent-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -119,8 +126,8 @@
 .progress-bar-track {
   position: relative;
   height: 20px;
-  background: rgba(255,255,255,0.06);
-  border-radius: 3px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 4px;
   cursor: pointer;
   overflow: visible;
   display: flex;
@@ -215,206 +222,271 @@
   }
 }
 
-/* ---- 手势覆盖层 ---- */
-.gesture-overlay {
+/* ============================================================
+   三态系统：息屏边缘微光 + 唤醒控制层 + 分屏手势指示器
+   ============================================================ */
+
+/* ---- 息屏态边缘微光刻度线（潜意识空间感，5% 透明度） ---- */
+.sleep-edge-glow {
   position: absolute;
   inset: 0;
-  z-index: 2;
-  background: transparent;
-}
-
-/* 侧边霓虹刻度条 */
-.gesture-indicator {
-  position: absolute;
-  top: 20%;
-  bottom: 20%;
-  width: 3px;
-  opacity: 0;
-  transition: opacity 0.3s;
+  z-index: 0;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.5s;
+  box-shadow: inset 0 0 80px rgba(255, 255, 255, 0.05);
 }
 
-.gesture-indicator.left { left: 8px; }
-.gesture-indicator.right { right: 8px; }
-
-.gesture-indicator.visible {
+.sleep-edge-glow.visible {
   opacity: 1;
 }
 
-.gesture-bar {
-  width: 100%;
-  height: 100%;
-  border-radius: 2px;
-  background: linear-gradient(180deg,
-    var(--phase-warmup) 0%,
-    var(--phase-core) 33%,
-    var(--phase-sprint-accel) 66%,
-    var(--phase-climax) 100%
-  );
-  box-shadow: 0 0 8px rgba(124, 77, 255, 0.4);
+/* ---- 控制层：唤醒态 50% 透明度浮现 ---- */
+.player-controls-layer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+  z-index: 1;
+  transition: opacity 0.6s var(--ease-out);
 }
 
-/* ---- 锁定按钮 ---- */
-.lock-toggle {
-  width: 40px;
-  height: 40px;
+/* ---- 双击水波纹 ---- */
+.doubletap-ripple {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: 2px solid rgba(168, 85, 247, 0.6);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 10;
+  animation: doubletapRipple 0.6s var(--ease-out) forwards;
+}
+
+@keyframes doubletapRipple {
+  0% {
+    width: 20px; height: 20px;
+    opacity: 1;
+    border-width: 2px;
+  }
+  100% {
+    width: 200px; height: 200px;
+    opacity: 0;
+    border-width: 0.5px;
+  }
+}
+
+/* ---- 分屏手势浮动指示器 ---- */
+.gesture-floating-indicator {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  animation: gestureFadeIn 0.2s var(--ease-out);
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(16px);
+  border-radius: var(--radius-lg);
+}
+
+.gesture-floating-indicator.left {
+  left: 12%;
+}
+
+.gesture-floating-indicator.right {
+  right: 12%;
+}
+
+@keyframes gestureFadeIn {
+  from { opacity: 0; transform: translateY(-50%) scale(0.8); }
+  to { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+
+.gesture-floating-icon {
+  font-size: 32px;
+}
+
+.gesture-floating-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.gesture-floating-label {
+  font-size: 11px;
+  font-weight: 500;
   color: var(--text-secondary);
+  letter-spacing: 2px;
+}
+
+/* ---- 快速读数条 ---- */
+.quick-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.quick-readout-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  opacity: 0.6;
+}
+
+.quick-readout-bar {
+  flex: 1;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.quick-readout-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.15s ease-out;
+}
+
+.quick-readout-fill.intensity {
+  background: var(--warm-start);
+}
+
+.quick-readout-val {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 24px;
+  text-align: right;
+}
+
+/* ---- 停止按钮 ---- */
+.btn-stop-inline {
+  padding: 8px 16px;
+  font-size: 13px;
+  opacity: 0.5;
+  margin-top: 8px;
+}
+
+/* ---- 旧控制器兼容（移除 player-controls 依赖） ---- */
+.player-controls {
+  display: none;
+}
+
+/* ============================================================
+   Onboarding 新手引导遮罩
+   ============================================================ */
+.onboarding-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--duration) var(--ease-spring);
+  animation: fadeIn 0.3s;
 }
 
-.lock-toggle:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--border-hover);
+.onboarding-content {
+  text-align: center;
+  padding: var(--space-xl);
+  max-width: 340px;
 }
 
-.lock-toggle.locked {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-dim);
+.onboarding-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 2px;
+  margin-bottom: var(--space-xl);
 }
 
-.controls-locked {
-  position: relative;
-}
-
-.controls-lock-overlay {
-  position: absolute;
-  inset: -8px;
-  border-radius: var(--radius-lg);
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
-  z-index: 3;
-  cursor: not-allowed;
-}
-
-.player-controls.controls-locked {
-  opacity: 0.3;
-  pointer-events: none;
-}
-
-/* ============================================================
-   双核心自适应盲控滑轨 SubjectiveSlider
-   ============================================================ */
-
-.subjective-slider {
-  position: relative;
+.onboarding-gestures {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  width: 100%;
-  max-width: 320px;
-  height: 48px;
-  margin: 20px auto;
-  padding: 0 16px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-inset), 0 1px 3px rgba(255, 255, 255, 0.02);
-  backdrop-filter: blur(10px);
-  overflow: visible;
-  user-select: none;
-  transition: all var(--duration) var(--ease-out);
+  align-items: flex-start;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-xl);
 }
 
-.subjective-slider.disabled {
-  opacity: 0.25;
-  pointer-events: none;
-  background: rgba(255, 255, 255, 0.01);
-  border-color: rgba(255, 255, 255, 0.03);
-  box-shadow: none;
+.onboarding-gesture {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
 }
 
-.slider-track-glow {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border-radius: var(--radius-xl);
-  pointer-events: none;
-  opacity: 0.15;
-  background: linear-gradient(90deg, rgba(168, 85, 247, 0.2) 0%, transparent 50%, rgba(236, 72, 153, 0.2) 100%);
-  transition: opacity 0.3s;
-}
-
-.subjective-slider:hover .slider-track-glow {
-  opacity: 0.3;
-}
-
-/* 重力金属回弹 Handle */
-.slider-handle {
-  position: absolute;
-  left: calc(50% - 20px);
-  width: 40px;
-  height: 40px;
-  background: linear-gradient(135deg, #444 0%, #222 100%);
-  border: 2px solid rgba(255, 255, 255, 0.15);
+.onboarding-gesture-icon {
+  font-size: 28px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6), inset 0 2px 2px rgba(255, 255, 255, 0.1);
-  cursor: grab;
-  z-index: 5;
+  background: rgba(255, 255, 255, 0.06);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.1s ease-out;
 }
 
-.slider-handle:active {
-  cursor: grabbing;
-  background: linear-gradient(135deg, #555 0%, #2a2a2a 100%);
-  border-color: rgba(255, 255, 255, 0.35);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.8), 0 0 10px rgba(168, 85, 247, 0.3);
+.onboarding-gesture-desc {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.slider-handle-inner {
-  width: 14px;
-  height: 14px;
-  background: rgba(255, 255, 255, 0.7);
-  border-radius: 50%;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
-  transition: background-color 0.3s, box-shadow 0.3s;
+.onboarding-gesture-desc strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.climax-active .slider-handle-inner {
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
-}
-
-/* 左右说明文案 */
-.slider-label {
+.onboarding-gesture-desc span {
   font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.5px;
-  pointer-events: none;
-  transition: opacity 0.2s, transform 0.2s;
-  opacity: 0.65;
+  color: var(--text-secondary);
 }
 
-.slider-label-left {
-  color: #a8a8ff;
-  text-align: left;
-  transform: translateX(4px);
+.onboarding-arrow {
+  opacity: 0.7;
 }
 
-.slider-label-right {
-  color: #ff9f8a;
-  text-align: right;
-  transform: translateX(-4px);
+.onboarding-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: var(--space-md) 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: var(--space-lg);
 }
 
-/* 当手指向一侧偏置时，虚化并微缩另一侧说明文字 */
-.slider-handle[style*="translateX(-"] ~ .slider-label-right {
-  opacity: 0.2;
+.onboarding-hint {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 1px;
+  animation: onboardingPulse 2s ease-in-out infinite;
 }
-.slider-handle[style*="translateX("]:not([style*="translateX(-"]):not([style*="translateX(0px"]) ~ .slider-label-left {
-  opacity: 0.2;
+
+@keyframes onboardingPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }

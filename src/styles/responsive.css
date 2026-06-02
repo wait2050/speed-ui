@@ -46,7 +46,10 @@
   }
 
   .sidebar-panel {
-    width: 360px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 480px;
+    border-radius: var(--radius-xl);
   }
 }
 

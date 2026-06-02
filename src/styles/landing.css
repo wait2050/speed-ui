@@ -42,12 +42,14 @@
 
 .breathing-text {
   font-size: 16px;
+  font-weight: 500;
   color: var(--text-secondary);
   letter-spacing: 2px;
 }
 
 .breathing-sub {
   font-size: 12px;
+  font-weight: 500;
   color: var(--text-tertiary);
 }
 
@@ -59,6 +61,13 @@
   gap: 20px;
 }
 
+.landing-rating-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
 .stars {
   display: flex;
   gap: 8px;
@@ -68,13 +77,10 @@
   background: none;
   border: none;
   cursor: pointer;
+  font-size: 36px;
   transition: all var(--duration) var(--ease-spring);
-  color: var(--border);
-}
-
-.star svg {
-  width: 36px;
-  height: 36px;
+  color: var(--text-tertiary);
+  line-height: 1;
 }
 
 .star.active {
@@ -109,19 +115,19 @@
 .fav-input {
   width: 100%;
   padding: 10px 14px;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius);
   background: var(--bg-elevated);
   backdrop-filter: blur(8px);
   color: var(--text-primary);
   font-size: 14px;
+  font-weight: 500;
   text-align: center;
   outline: none;
-  transition: border-color var(--duration-fast);
+  transition: all var(--duration-fast);
 }
 
 .fav-input:focus {
-  border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
 

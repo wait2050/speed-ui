@@ -20,7 +20,7 @@
 
 .hd-title {
   font-size: 24px;
-  font-weight: 300;
+  font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 8px;
   letter-spacing: 2px;
@@ -61,11 +61,11 @@
 /* ---- 阶段分布条 ---- */
 .hd-phase-bar-section {
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-md);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: none;
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
 }
 
 .hd-phase-bar {
@@ -111,11 +111,11 @@
 /* ---- 快感热力图 ---- */
 .hd-heatmap-section {
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-md);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: none;
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
 }
 
 .hd-heatmap-container {
@@ -269,11 +269,11 @@
 /* ---- 打点明细列表 ---- */
 .hd-points-list-section {
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-md);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: none;
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
 }
 
 .hd-points-list {
@@ -287,11 +287,10 @@
   align-items: center;
   gap: 12px;
   padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.hd-point-item:last-child {
-  border-bottom: none;
+.hd-point-item + .hd-point-item {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .hd-point-index {
@@ -326,10 +325,10 @@
 
 /* ---- AI 区块 ---- */
 .hd-ai-section {
-  background: rgba(124, 77, 255, 0.05);
-  border: 1px solid rgba(124, 77, 255, 0.15);
-  border-radius: var(--radius-lg);
-  padding: var(--space-md);
+  background: rgba(124, 77, 255, 0.04);
+  border: none;
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
   position: relative;
   overflow: hidden;
 }

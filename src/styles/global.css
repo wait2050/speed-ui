@@ -1,14 +1,15 @@
 /* ============================================================
    全局基础：CSS 变量、Reset、容器、动画
+   Breathing Space v3.0 — 极简暗黑 · 去边框化 · WCAG 可读底线
    ============================================================ */
 
 :root {
-  /* ---- 背景层次 ---- */
-  --bg-primary: #0a0a0f;
-  --bg-card: rgba(255, 255, 255, 0.03);
-  --bg-card-hover: rgba(255, 255, 255, 0.05);
+  /* ---- 背景层次 (纯黑主底) ---- */
+  --bg-primary: #000000;
+  --bg-card: rgba(255, 255, 255, 0.04);
+  --bg-card-hover: rgba(255, 255, 255, 0.08);
   --bg-elevated: rgba(255, 255, 255, 0.06);
-  --bg-overlay: rgba(0, 0, 0, 0.5);
+  --bg-overlay: rgba(0, 0, 0, 0.6);
 
   /* ---- 强调色 ---- */
   --accent-start: #7c3aed;
@@ -23,15 +24,15 @@
   --warm-gradient: linear-gradient(135deg, #ff6b35, #ffc107);
   --warm-dim: rgba(255, 107, 53, 0.15);
 
-  /* ---- 文字 ---- */
-  --text-primary: #f0f0f5;
-  --text-secondary: #6b7280;
-  --text-tertiary: rgba(255, 255, 255, 0.2);
+  /* ---- 文字阶梯 (WCAG 可读底线：辅助字 ≥ 40%) ---- */
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.70);
+  --text-tertiary: rgba(255, 255, 255, 0.40);
   --text-accent: var(--accent);
 
-  /* ---- 边框 ---- */
-  --border: rgba(255, 255, 255, 0.08);
-  --border-hover: rgba(255, 255, 255, 0.15);
+  /* ---- 边框（去边框化：仅交互态保留） ---- */
+  --border: rgba(255, 255, 255, 0.06);
+  --border-hover: rgba(255, 255, 255, 0.12);
   --border-active: var(--accent);
 
   /* ---- 圆角 ---- */
@@ -105,10 +106,11 @@ html, body, #root {
   overflow: hidden;
   font-family: var(--font-sans);
   background: var(--bg-primary);
+  /* 纯黑底 + 极微弱渐变光晕（潜意识空间感） */
   background-image:
-    radial-gradient(ellipse 600px 400px at 20% 10%, rgba(124, 58, 237, 0.06), transparent),
-    radial-gradient(ellipse 500px 350px at 80% 80%, rgba(236, 72, 153, 0.04), transparent),
-    radial-gradient(ellipse 400px 300px at 50% 50%, rgba(79, 195, 247, 0.03), transparent);
+    radial-gradient(ellipse 600px 400px at 20% 10%, rgba(124, 58, 237, 0.04), transparent),
+    radial-gradient(ellipse 500px 350px at 80% 80%, rgba(236, 72, 153, 0.03), transparent),
+    radial-gradient(ellipse 400px 300px at 50% 50%, rgba(79, 195, 247, 0.02), transparent);
   color: var(--text-primary);
   font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
@@ -129,22 +131,28 @@ html, body, #root {
   -webkit-overflow-scrolling: touch;
 }
 
-/* ---- Typography ---- */
+/* ---- Typography (废除 font-light，小字保底 font-medium) ---- */
 .app-title {
-  font-size: 24px;
-  font-weight: 300;
-  letter-spacing: 2px;
-  color: var(--text-secondary);
-  margin-bottom: var(--space-xl);
+  font-size: 48px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2xl);
   text-align: center;
+  line-height: 1.1;
 }
 
 h2 {
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-secondary);
-  letter-spacing: 1.5px;
+  letter-spacing: 1px;
   margin-bottom: var(--space-lg);
+}
+
+/* 保底规则：所有小于 text-sm 的文字至少 font-weight 500 */
+small, .text-xs, [style*="font-size: 10px"], [style*="font-size: 11px"], [style*="font-size: 12px"] {
+  font-weight: 500 !important;
 }
 
 /* ---- Animations ---- */
@@ -156,13 +164,17 @@ h2 {
   from { opacity: 0; } to { opacity: 1; }
 }
 
-@keyframes slideIn {
-  from { transform: translateX(-100%); } to { transform: translateX(0); }
+@keyframes slideUp {
+  from { transform: translateY(100%); } to { transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(0); } to { transform: translateY(100%); }
 }
 
 @keyframes breathe {
-  0%, 100% { transform: scale(1); opacity: 0.4; }
-  50% { transform: scale(1.3); opacity: 0.8; }
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50% { transform: scale(1.3); opacity: 0.7; }
 }
 
 /* ---- Page Transition Overlay ---- */
@@ -171,7 +183,7 @@ h2 {
   inset: 0;
   z-index: 999;
   pointer-events: none;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.02);
   backdrop-filter: blur(0px);
   opacity: 0;
   transition: all 300ms var(--ease-out);
@@ -180,31 +192,30 @@ h2 {
 .page-transition-overlay.active {
   opacity: 1;
   backdrop-filter: blur(8px);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
 }
 
-/* ---- Glass Card ---- */
+/* ---- Glass Card (去边框：纯背景差 + 模糊切分层级) ---- */
 .glass-card {
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-md);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: none;
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
   transition: all var(--duration) var(--ease-out);
 }
 
 .glass-card:hover {
   background: var(--bg-card-hover);
-  backdrop-filter: blur(25px);
-  -webkit-backdrop-filter: blur(25px);
-  border-color: var(--border-hover);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
 }
 
 /* ---- Stat Number (Gradient Text) ---- */
 .stat-number {
-  font-size: 24px;
-  font-weight: 300;
+  font-size: 28px;
+  font-weight: 700;
   background: var(--accent-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;

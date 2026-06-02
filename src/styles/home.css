@@ -7,10 +7,53 @@
   padding-bottom: calc(100px + var(--safe-bottom));
 }
 
-/* ---- 时长卡片 ---- */
+/* ---- Hero 留白区 ---- */
+.home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-3xl) 0 var(--space-xl);
+  text-align: center;
+}
+
+.home-subtitle {
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  letter-spacing: 6px;
+  margin-top: var(--space-sm);
+}
+
+/* ---- 内联 CTA 按钮 ---- */
+.btn-compile-inline {
+  width: 100%;
+  margin-top: var(--space-md);
+  margin-bottom: var(--space-md);
+  padding: 16px;
+  font-size: 17px;
+  background: var(--accent-gradient);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow), var(--shadow-glow);
+  cursor: pointer;
+  transition: all var(--duration) var(--ease-spring);
+}
+
+.btn-compile-inline:hover {
+  filter: brightness(1.15);
+  box-shadow: var(--shadow-lg), 0 0 30px rgba(168, 85, 247, 0.5);
+  transform: translateY(-1px);
+}
+
+.btn-compile-inline:active {
+  transform: scale(0.96);
+}
+
+/* ---- 时长卡片 (去边框：纯背景差切分层级) ---- */
 .duration-card {
   text-align: center;
-  padding: var(--space-lg);
+  padding: var(--space-2xl) var(--space-lg);
   width: 100%;
 }
 
@@ -24,14 +67,16 @@
 }
 
 .duration-value {
-  font-size: 72px;
-  font-weight: 200;
+  font-size: 96px;
+  font-weight: 700;
   line-height: 1;
+  letter-spacing: -2px;
 }
 
 .duration-unit {
-  font-size: 20px;
+  font-size: 24px;
   color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .duration-slider {
@@ -67,34 +112,34 @@
   justify-content: center;
 }
 
-/* ---- 手风琴卡片 ---- */
+/* ---- 手风琴卡片 (去边框：纯背景差) ---- */
 .accordion-card {
   width: 100%;
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: none;
+  border-radius: var(--radius-xl);
   overflow: hidden;
   transition: all var(--duration) var(--ease-out);
 }
 
 .accordion-card:hover {
   background: var(--bg-card-hover);
-  border-color: var(--border-hover);
 }
 
 .accordion-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
   cursor: pointer;
   user-select: none;
+  font-weight: 500;
 }
 
 .accordion-header:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .accordion-chevron {
@@ -119,18 +164,18 @@
 }
 
 .accordion-content {
-  padding: 0 var(--space-md) var(--space-md);
+  padding: 0 var(--space-lg) var(--space-lg);
   display: flex;
   flex-direction: column;
-  gap: var(--space);
+  gap: var(--space-md);
 }
 
 .accordion-title {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--text-primary);
   letter-spacing: 0.5px;
 }
