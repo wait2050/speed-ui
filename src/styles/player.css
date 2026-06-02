@@ -343,9 +343,119 @@
   margin-top: 8px;
 }
 
+/* ---- 唤醒单击区域（全屏透明层） ---- */
+.player-wake-zone {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* ---- 兴奋闪光 ---- */
+.player-page.excited-flash {
+  animation: excitedFlash 0.8s ease-out;
+}
+
+@keyframes excitedFlash {
+  0% { box-shadow: inset 0 0 60px rgba(168, 85, 247, 0.5); }
+  100% { box-shadow: inset 0 0 0px rgba(168, 85, 247, 0); }
+}
+
 /* ---- 旧控制器兼容（移除 player-controls 依赖） ---- */
 .player-controls {
   display: none;
+}
+
+/* ============================================================
+   SubjectiveSlider — 水平拖拽滑块（从原版恢复）
+   ============================================================ */
+.subjective-slider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 320px;
+  height: 48px;
+  margin: 16px auto;
+  padding: 0 12px;
+  background: var(--bg-card);
+  border: none;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-inset), 0 1px 3px rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(10px);
+  overflow: visible;
+  user-select: none;
+  transition: all var(--duration) var(--ease-out);
+}
+
+.slider-track-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-xl);
+  pointer-events: none;
+  opacity: 0.12;
+  background: linear-gradient(90deg, rgba(168, 85, 247, 0.2) 0%, transparent 50%, rgba(236, 72, 153, 0.2) 100%);
+  transition: opacity 0.3s;
+}
+
+.subjective-slider:hover .slider-track-glow {
+  opacity: 0.25;
+}
+
+.slider-handle {
+  position: absolute;
+  left: calc(50% - 20px);
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #444 0%, #222 100%);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6), inset 0 2px 2px rgba(255, 255, 255, 0.1);
+  cursor: grab;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease-out;
+}
+
+.slider-handle:active {
+  cursor: grabbing;
+  background: linear-gradient(135deg, #555 0%, #2a2a2a 100%);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.8), 0 0 10px rgba(168, 85, 247, 0.3);
+}
+
+.slider-handle-inner {
+  width: 14px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+  transition: background-color 0.3s, box-shadow 0.3s;
+}
+
+.climax-active .slider-handle-inner {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.slider-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.slider-label-left {
+  color: #a8a8ff;
+  text-align: left;
+}
+
+.slider-label-right {
+  color: #ff9f8a;
+  text-align: right;
 }
 
 /* ============================================================

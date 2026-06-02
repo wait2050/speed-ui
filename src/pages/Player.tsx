@@ -67,16 +67,21 @@ export const Player: React.FC = () => {
   const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [controlsOpacity, setControlsOpacity] = useState(0.5);
 
-  // ---- 分屏手势：左=兴奋打点，右=高潮/余韵 ----
+  // ---- SubjectiveSlider 滑块：左滑=兴奋打点，右滑=高潮/余韵 ----
   const [gestureIndicator, setGestureIndicator] = useState<{
     zone: 'left' | 'right';
     icon: string;
     label: string;
     triggered: boolean;
   } | null>(null);
-  const gestureStartY = useRef(0);
-  const gestureActiveZone = useRef<'left' | 'right' | null>(null);
-  const gestureTriggered = useRef(false); // 每次手势只触发一次
+  const [offsetX, setOffsetX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isExcited, setIsExcited] = useState(false);
+  const touchStartX = useRef(0);
+  const exciteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 手势标记（防滑动误触单击）
+  const gestureHappened = useRef(false);
 
   // ---- 双击检测 ----
   const lastTapTime = useRef(0);
@@ -223,32 +228,36 @@ export const Player: React.FC = () => {
   }, [ds.actionName, addExcitementPoint, addRipple]);
 
   // ============================================================
-  // 分屏手势：左=兴奋打点，右=高潮/余韵（滑动≥30px触发）
+  // SubjectiveSlider 拖拽：左滑兴奋打点，右滑高潮/余韵
   // ============================================================
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const touch = e.touches[0];
-    const screenWidth = window.innerWidth;
-    gestureActiveZone.current = touch.clientX < screenWidth / 2 ? 'left' : 'right';
-    gestureStartY.current = touch.clientY;
-    gestureTriggered.current = false;
-  }, []);
+  const handleSliderTouchStart = useCallback((e: React.TouchEvent) => {
+    e.stopPropagation(); // 防止冒泡触发页面 tap
+    touchStartX.current = e.touches[0].clientX;
+    setIsDragging(true);
+    wakeUp();
+  }, [wakeUp]);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    const zone = gestureActiveZone.current;
-    if (!zone || gestureTriggered.current) return;
-    const touch = e.touches[0];
-    const deltaY = Math.abs(touch.clientY - gestureStartY.current);
-    if (deltaY < 30) return; // 阈值：滑动超过 30px 才触发
+  const handleSliderTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging) return;
+    const diffX = e.touches[0].clientX - touchStartX.current;
+    setOffsetX(Math.max(-80, Math.min(80, diffX)));
+  }, [isDragging]);
 
-    gestureTriggered.current = true;
+  const handleSliderTouchEnd = useCallback(() => {
+    if (!isDragging) return;
+    setIsDragging(false);
+    gestureHappened.current = true;
 
-    if (zone === 'left') {
-      // 左侧滑动 → 记录兴奋点
+    if (offsetX < -60) {
+      // 左滑 → 兴奋打点（全阶段）
       recordExcitement();
+      setIsExcited(true);
       triggerHaptic([20, 10, 20]);
       setGestureIndicator({ zone: 'left', icon: '⚡', label: '兴奋打点', triggered: true });
-    } else {
-      // 右侧滑动 → 高潮/余韵
+      if (exciteTimerRef.current) clearTimeout(exciteTimerRef.current);
+      exciteTimerRef.current = setTimeout(() => setIsExcited(false), 800);
+    } else if (offsetX > 60 && ds.phase !== 'warmup') {
+      // 右滑 → 高潮/余韵（热身禁用）
       if (ds.phase !== 'climax') {
         engineRef.current?.triggerSubjectiveClimax('捏住并旋转');
         setSubjectiveClimax(true);
@@ -261,22 +270,10 @@ export const Player: React.FC = () => {
         setGestureIndicator({ zone: 'right', icon: '✨', label: '余韵', triggered: true });
       }
     }
-
-    resetWakeTimer();
-  }, [ds.phase, recordExcitement, setSubjectiveClimax, resetWakeTimer]);
-
-  // ---- 手势检测标记（防止滑动误触发单击） ----
-  const gestureHappened = useRef(false);
-
-  const handleTouchEnd = useCallback(() => {
-    if (gestureActiveZone.current && gestureTriggered.current) {
-      gestureHappened.current = true;
-    }
-    gestureActiveZone.current = null;
-    gestureTriggered.current = false;
-    // 延迟清除指示器
     setTimeout(() => setGestureIndicator(null), 800);
-  }, []);
+    setOffsetX(0);
+    resetWakeTimer();
+  }, [isDragging, ds.phase, offsetX, recordExcitement, setSubjectiveClimax, resetWakeTimer]);
 
   // ---- 单击唤醒 / 双击暂停 ----
   const handleTap = useCallback((e: React.MouseEvent | React.TouchEvent) => {
@@ -313,10 +310,13 @@ export const Player: React.FC = () => {
         togglePause();
       } else if (e.key === 'ArrowLeft') {
         recordExcitement();
+        setIsExcited(true);
         triggerHaptic([20, 10, 20]);
         setGestureIndicator({ zone: 'left', icon: '⚡', label: '兴奋打点', triggered: true });
         setTimeout(() => setGestureIndicator(null), 800);
-      } else if (e.key === 'ArrowRight') {
+        if (exciteTimerRef.current) clearTimeout(exciteTimerRef.current);
+        exciteTimerRef.current = setTimeout(() => setIsExcited(false), 800);
+      } else if (e.key === 'ArrowRight' && ds.phase !== 'warmup') {
         if (ds.phase !== 'climax') {
           engineRef.current?.triggerSubjectiveClimax('捏住并旋转');
           setSubjectiveClimax(true);
@@ -348,13 +348,12 @@ export const Player: React.FC = () => {
 
   return (
     <div
-      className={`page player-page ${subjectiveClimaxTriggered || ds.phase === 'climax' ? 'climax-active' : ''} ${uiState}`}
+      className={`page player-page ${subjectiveClimaxTriggered || ds.phase === 'climax' ? 'climax-active' : ''} ${uiState} ${isExcited ? 'excited-flash' : ''}`}
       data-phase={ds.phase}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
       onClick={handleTap}
     >
+      {/* 息屏态边缘微光 + 唤醒单击区域 */}
+      <div className="player-wake-zone" />
       {/* 息屏态边缘微光刻度线 */}
       <div className={`sleep-edge-glow ${uiState === 'sleep' ? 'visible' : ''}`} />
 
@@ -387,6 +386,28 @@ export const Player: React.FC = () => {
         <div className="player-action-name">{ds.actionName}</div>
         <Timer remainingMs={ds.actionRemainingMs} totalMs={ds.actionRemainingMs || 60000} beatPulse={beatPulse} />
 
+        {/* SubjectiveSlider — 水平拖拽滑块 */}
+        <div className="subjective-slider">
+          <div className="slider-track-glow" />
+          <div className="slider-label slider-label-left">⚡ 兴奋打点 (左滑/←)</div>
+          <div
+            className="slider-handle"
+            style={{ transform: `translateX(${offsetX}px)` }}
+            onTouchStart={handleSliderTouchStart}
+            onTouchMove={handleSliderTouchMove}
+            onTouchEnd={handleSliderTouchEnd}
+          >
+            <div className="slider-handle-inner" />
+          </div>
+          <div className="slider-label slider-label-right">
+            {ds.phase === 'warmup'
+              ? '🔒 热身中'
+              : ds.phase === 'climax'
+                ? '✨ 释放余韵 (右滑/→)'
+                : '🔥 开启冲刺 (右滑/→)'}
+          </div>
+        </div>
+
         <button className="btn-secondary btn-icon btn-stop-inline" onClick={handleStop}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <rect x="6" y="6" width="12" height="12" rx="2"/>
@@ -401,39 +422,25 @@ export const Player: React.FC = () => {
             <h2 className="onboarding-title">手势引导</h2>
             <div className="onboarding-gestures">
               <div className="onboarding-gesture left">
-                <div className="onboarding-gesture-icon">👆</div>
+                <div className="onboarding-gesture-icon">👈</div>
                 <div className="onboarding-gesture-desc">
-                  <strong>左侧滑动</strong>
+                  <strong>滑块左滑</strong>
                   <span>兴奋打点 ⚡</span>
-                </div>
-                <div className="onboarding-arrow up-down">
-                  <svg width="24" height="48" viewBox="0 0 24 48">
-                    <line x1="12" y1="4" x2="12" y2="44" stroke="white" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.6"/>
-                    <polygon points="12,0 6,8 18,8" fill="white" opacity="0.8"/>
-                    <polygon points="12,48 6,40 18,40" fill="white" opacity="0.8"/>
-                  </svg>
                 </div>
               </div>
               <div className="onboarding-gesture right">
-                <div className="onboarding-gesture-icon">👆</div>
+                <div className="onboarding-gesture-icon">👉</div>
                 <div className="onboarding-gesture-desc">
-                  <strong>右侧滑动</strong>
+                  <strong>滑块右滑</strong>
                   <span>冲刺 / 余韵 🔥</span>
-                </div>
-                <div className="onboarding-arrow up-down">
-                  <svg width="24" height="48" viewBox="0 0 24 48">
-                    <line x1="12" y1="4" x2="12" y2="44" stroke="white" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.6"/>
-                    <polygon points="12,0 6,8 18,8" fill="white" opacity="0.8"/>
-                    <polygon points="12,48 6,40 18,40" fill="white" opacity="0.8"/>
-                  </svg>
                 </div>
               </div>
             </div>
             <div className="onboarding-center">
-              <div className="onboarding-gesture-icon" style={{ fontSize: 32 }}>👆👆</div>
+              <div className="onboarding-gesture-icon" style={{ fontSize: 32 }}>👆</div>
               <div className="onboarding-gesture-desc">
-                <strong>双击中央</strong>
-                <span>播放 / 暂停 ⏯️</span>
+                <strong>单击屏幕</strong>
+                <span>唤醒 / 查看控制器</span>
               </div>
             </div>
             <p className="onboarding-hint">现在双击任意位置开始</p>
