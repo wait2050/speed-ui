@@ -64,7 +64,7 @@ export class PlaybackEngine {
   private elapsedBeforePause = 0;
   private timerId: ReturnType<typeof setInterval> | null = null;
   private scheduledBeats = new Set<number>();
-  private snapsPlayed = new Set<number>(); // 用 timeline 索引去重
+  private scheduledSnaps = new Set<number>(); // key = snap 绝对时间戳（毫秒整数）去重
   private lastVoiceKey = '';
   private voiceEndTime = 0;
 
@@ -156,7 +156,7 @@ export class PlaybackEngine {
     this.pausedAt = null;
     this.elapsedBeforePause = 0;
     this.scheduledBeats.clear();
-    this.snapsPlayed.clear();
+    this.scheduledSnaps.clear();
     this.excitementPoints = [];
     this.lastVoiceKey = '';
     this.voiceEndTime = 0;
@@ -192,7 +192,7 @@ export class PlaybackEngine {
     const wasPaused = this.isPaused;
     if (this.timerId) { clearInterval(this.timerId); this.timerId = null; }
     this.scheduledBeats.clear();
-    this.snapsPlayed.clear();
+    this.scheduledSnaps.clear();
     this.lastVoiceKey = '';
     this.voiceEndTime = 0;
     this.startTime = this.ctx.currentTime - targetMs / 1000;
@@ -307,13 +307,24 @@ export class PlaybackEngine {
         accumulatedMs += item.duration;
       }
 
-      // 打响指：accumulatedMs 已更新，snap 的触发时间 = 前面所有 action/rest 的累积终点
-      if (item.type === 'snap') {
-        console.log(`[Snap] ti=${ti} elapsedMs=${Math.round(elapsedMs)} accumulatedMs=${Math.round(accumulatedMs)} played=${this.snapsPlayed.has(ti)}`);
-        if (elapsedMs >= accumulatedMs && !this.snapsPlayed.has(ti)) {
-          this.snapsPlayed.add(ti);
-          console.log(`[Snap] 触发播放 ti=${ti}`);
-          this.playSnap();
+      // 打响指：预调度式（与节拍音共用同一套 look-ahead 机制）
+      // accumulatedMs 已更新，snap 的触发时间 = 前面所有 action/rest 的累积终点
+      if (item.type === 'snap' && this.snapBuffer) {
+        const snapAbsTime = this.startTime + accumulatedMs / 1000;
+        const key = Math.round(snapAbsTime * 1000);
+        if (
+          snapAbsTime > now &&
+          snapAbsTime < now + LOOK_AHEAD_MS / 1000 &&
+          !this.scheduledSnaps.has(key)
+        ) {
+          this.scheduledSnaps.add(key);
+          const src = this.ctx.createBufferSource();
+          src.buffer = this.snapBuffer;
+          const gain = this.ctx.createGain();
+          gain.gain.value = this.snapVolume;
+          src.connect(gain);
+          gain.connect(this.ctx.destination);
+          src.start(snapAbsTime); // 精确时间点预调度
         }
       }
     }
@@ -498,6 +509,7 @@ export class PlaybackEngine {
 
   /** 播放打响指 */
   playSnap(): void {
+    console.log(`[playSnap] ctx=${!!this.ctx} snapBuffer=${!!this.snapBuffer} snapVolume=${this.snapVolume} ctxState=${this.ctx?.state}`);
     if (!this.ctx || !this.snapBuffer) return;
     // 强制恢复 AudioContext（iOS 可能在不交互时挂起）
     this.ctx.resume().catch(() => {});
@@ -508,6 +520,7 @@ export class PlaybackEngine {
     src.connect(gain);
     gain.connect(this.ctx.destination);
     src.start(0);
+    console.log(`[playSnap] src.start(0) called, bufferDuration=${this.snapBuffer.duration.toFixed(2)}s`);
   }
 
   /** 播放主观打点风铃音 */
