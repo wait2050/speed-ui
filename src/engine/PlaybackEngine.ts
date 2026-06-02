@@ -73,6 +73,7 @@ export class PlaybackEngine {
   private excitementPoints: ExcitementPoint[] = [];
   private onUpdate: EngineUpdateCallback | null = null;
   private onFinished: (() => void) | null = null;
+  private onBeatCallback?: () => void;
 
   // ---- 初始化 ----
 
@@ -133,6 +134,11 @@ export class PlaybackEngine {
     this.onFinished = cb;
   }
 
+  /** 注册节拍回调（每次 beat 时触发） */
+  setOnBeat(cb: () => void): void {
+    this.onBeatCallback = cb;
+  }
+
   // ---- 播放控制 ----
 
   start(timeline: TimelineItem[]): void {
@@ -154,6 +160,7 @@ export class PlaybackEngine {
 
     this.scheduleLoop();
     this.timerId = setInterval(() => this.scheduleLoop(), SCHEDULE_INTERVAL_MS);
+    this.setupMediaSession();
   }
 
   pause(): void {
@@ -205,6 +212,7 @@ export class PlaybackEngine {
 
   destroy(): void {
     this.stop();
+    this.teardownMediaSession();
     if (this.ctx) { this.ctx.close(); this.ctx = null; }
     this.beatBuffers.clear();
     this.signalBuffers.clear();
@@ -354,6 +362,8 @@ export class PlaybackEngine {
     gain.gain.value = volume;
     src.connect(gain).connect(this.ctx.destination);
     src.start(when);
+    // 触发节拍回调（用于视觉同步）
+    this.onBeatCallback?.();
   }
 
   private playSignal(signal: string, when: number): void {
@@ -661,5 +671,28 @@ export class PlaybackEngine {
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate([40, 200]);
     }
+  }
+
+  // ---- Media Session API 后台保活 ----
+
+  /** 注册 Media Session，声明正在播放音频以保活后台线程 */
+  private setupMediaSession(): void {
+    if (!('mediaSession' in navigator)) return;
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: '节奏按摩引导器',
+      artist: 'Rhythm Guide',
+      album: 'Session',
+    });
+
+    navigator.mediaSession.setActionHandler('play', () => this.resume());
+    navigator.mediaSession.setActionHandler('pause', () => this.pause());
+    navigator.mediaSession.playbackState = 'playing';
+  }
+
+  private teardownMediaSession(): void {
+    if (!('mediaSession' in navigator)) return;
+    navigator.mediaSession.playbackState = 'none';
+    navigator.mediaSession.metadata = null;
   }
 }

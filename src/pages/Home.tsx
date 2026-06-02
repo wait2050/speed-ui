@@ -1,12 +1,11 @@
 // ============================================================
-// Home — 主页：总时长设定 + 生成编排
+// Home — 主页：总时长设定 + 手风琴卡片分组 + 生成编排
 // ============================================================
 import React, { useState, useCallback } from 'react';
 import { useAppStore } from '../state/store';
 import { compileSequence } from '../compiler/compiler';
 import { loadPreferences, savePreferences } from '../storage';
 import { audioEngine } from '../audio/engine';
-import { formatSec } from '../utils/time';
 import { Footer } from '../components/Footer';
 import type { SoundType, SpeedTier, PhaseOption } from '../types';
 
@@ -26,10 +25,38 @@ const SOUNDS: { id: SoundType; label: string }[] = [
   { id: 'bassdrum', label: '低音鼓点' },
 ];
 
+// ---- AccordionCard 组件 ----
+const AccordionCard: React.FC<{
+  title: string;
+  badge?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}> = ({ title, badge, defaultOpen = false, children }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={`accordion-card ${open ? 'open' : ''}`}>
+      <div className="accordion-header" onClick={() => setOpen(!open)}>
+        <div className="accordion-title">
+          <span>{title}</span>
+          {badge && <span className="accordion-badge">{badge}</span>}
+        </div>
+        <span className="accordion-chevron">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5"
+              strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </span>
+      </div>
+      <div className="accordion-body">
+        <div className="accordion-content">{children}</div>
+      </div>
+    </div>
+  );
+};
+
 export const Home: React.FC = () => {
   const { startCompiling: dispatchStartCompiling, compilationDone } = useAppStore();
   const [prefs, setPrefs] = useState(() => loadPreferences());
-  const [showSettings, setShowSettings] = useState(false);
   const [enabledPhases, setEnabledPhases] = useState<Set<PhaseOption>>(
     () => new Set<PhaseOption>(['warmup', 'core', 'sprint', 'climax', 'afterglow', 'cooldown'])
   );
@@ -44,8 +71,8 @@ export const Home: React.FC = () => {
     () => new Set(ALL_ACTION_NAMES)
   );
 
-  const [climaxMin, setClimaxMin] = useState(3);     // 高潮冲刺 1-5 分钟
-  const [afterglowMin, setAfterglowMin] = useState(1); // 余韵 1-3 分钟
+  const [climaxMin, setClimaxMin] = useState(3);
+  const [afterglowMin, setAfterglowMin] = useState(1);
 
   const [snapCounts, setSnapCounts] = useState<Record<string, number>>({
     core: 0, sprint_start: 0, sprint_accel: 0, sprint_peak: 0, climax: 0, afterglow: 0,
@@ -68,12 +95,8 @@ export const Home: React.FC = () => {
   }, []);
 
   const handleCompile = useCallback(async () => {
-    // 首次用户交互时初始化音频引擎
     await audioEngine.init();
-
     dispatchStartCompiling();
-
-    // 编译器是纯函数，但用 setTimeout 避免阻塞 UI
     setTimeout(() => {
       const totalMs = prefs.defaultDuration * 1000;
       const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases }, enabledActions, climaxMin, afterglowMin, snapCounts);
@@ -103,20 +126,20 @@ export const Home: React.FC = () => {
     };
     setPrefs(newPrefs);
     savePreferences(newPrefs);
-    // 试听
     audioEngine.init().then(() => audioEngine.previewBeat(sound));
   }, [prefs]);
 
   const presets = [10, 15, 20, 25, 30, 40, 50, 60];
+  const minutes = Math.floor(prefs.defaultDuration / 60);
 
   return (
     <div className="page home-page">
       <h1 className="app-title">节奏按摩引导器</h1>
 
-      {/* 时长设定 */}
-      <section className="duration-section">
+      {/* 时长选择 - Glass Card 包裹 */}
+      <section className="glass-card duration-card">
         <div className="duration-display">
-          <span className="duration-value">{Math.floor(prefs.defaultDuration / 60)}</span>
+          <span className="stat-number duration-value">{minutes}</span>
           <span className="duration-unit">分钟</span>
         </div>
         <input
@@ -124,14 +147,14 @@ export const Home: React.FC = () => {
           className="duration-slider"
           min={1}
           max={60}
-          value={Math.floor(prefs.defaultDuration / 60)}
+          value={minutes}
           onChange={e => handleDurationChange(parseInt(e.target.value) * 60)}
         />
         <div className="preset-row">
           {presets.map(p => (
             <button
               key={p}
-              className={`preset-btn ${Math.floor(prefs.defaultDuration / 60) === p ? 'active' : ''}`}
+              className={`btn-chip ${minutes === p ? 'active' : ''}`}
               onClick={() => handleDurationChange(p * 60)}
             >
               {p}′
@@ -140,9 +163,8 @@ export const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* 阶段选择 */}
-      <section className="phase-toggles">
-        <span className="phase-toggles-label">包含阶段</span>
+      {/* 手风琴卡片 1：阶段配置 */}
+      <AccordionCard title="阶段配置" defaultOpen>
         <div className="phase-toggles-row">
           {([
             ['warmup', '热身'],
@@ -154,58 +176,51 @@ export const Home: React.FC = () => {
           ] as [PhaseOption, string][]).map(([key, label]) => (
             <button
               key={key}
-              className={`phase-toggle ${enabledPhases.has(key) ? 'active' : ''}`}
+              className={`btn-chip ${enabledPhases.has(key) ? 'active' : ''}`}
               onClick={() => togglePhase(key)}
             >
               {label}
             </button>
           ))}
         </div>
-      </section>
 
-      {/* 高潮/余韵时长 */}
-      <section className="phase-toggles">
-        <span className="phase-toggles-label">高潮冲刺 {climaxMin} 分钟 · 余韵 {afterglowMin} 分钟</span>
+        <div className="accordion-sub-label">高潮冲刺 {climaxMin} 分钟 · 余韵 {afterglowMin} 分钟</div>
         <div className="phase-toggles-row">
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', alignSelf: 'center' }}>高潮</span>
+          <span className="phase-mini-label">高潮</span>
           {[1, 2, 3, 4, 5].map(m => (
             <button
               key={`c${m}`}
-              className={`phase-toggle ${climaxMin === m ? 'active' : ''}`}
+              className={`btn-chip ${climaxMin === m ? 'active' : ''}`}
               onClick={() => setClimaxMin(m)}
             >
               {m}′
             </button>
           ))}
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginLeft: 8 }}>余韵</span>
+          <span className="phase-mini-label" style={{ marginLeft: 8 }}>余韵</span>
           {[1, 2, 3].map(m => (
             <button
               key={`a${m}`}
-              className={`phase-toggle ${afterglowMin === m ? 'active' : ''}`}
+              className={`btn-chip ${afterglowMin === m ? 'active' : ''}`}
               onClick={() => setAfterglowMin(m)}
             >
               {m}′
             </button>
           ))}
         </div>
-      </section>
 
-      {/* 打响指次数 */}
-      <section className="phase-toggles">
-        <span className="phase-toggles-label">打响指次数</span>
-        <div className="phase-toggles-row">
+        <div className="accordion-sub-label">打响指次数</div>
+        <div className="phase-toggles-row snap-toggles">
           {([
             ['core', '核心'], ['sprint_start', '起冲'], ['sprint_accel', '加速'],
             ['sprint_peak', '顶峰'], ['climax', '高潮'], ['afterglow', '余韵'],
           ] as [string, string][]).map(([key, label]) => (
-            <span key={key} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)' }}>{label}</span>
+            <span key={key} className="snap-group">
+              <span className="snap-label">{label}</span>
               {[0, 1, 2, 3, 4].map(n => (
                 <button
                   key={n}
-                  className={`phase-toggle ${(snapCounts[key] ?? 0) === n ? 'active' : ''}`}
+                  className={`btn-chip snap-chip ${(snapCounts[key] ?? 0) === n ? 'active' : ''}`}
                   onClick={() => setSnapCounts(prev => ({ ...prev, [key]: n }))}
-                  style={{ padding: '3px 8px', fontSize: 10, minWidth: 24 }}
                 >
                   {n}
                 </button>
@@ -213,79 +228,69 @@ export const Home: React.FC = () => {
             </span>
           ))}
         </div>
-      </section>
+      </AccordionCard>
 
-      {/* 动作选择 */}
-      <section className="phase-toggles">
-        <span className="phase-toggles-label">可选动作 ({enabledActions.size}/{ALL_ACTION_NAMES.length})</span>
+      {/* 手风琴卡片 2：动作选择 */}
+      <AccordionCard title="可选动作" badge={`${enabledActions.size}/7`}>
         <div className="phase-toggles-row">
           {ALL_ACTION_NAMES.map(name => (
             <button
               key={name}
-              className={`phase-toggle action-toggle ${enabledActions.has(name) ? 'active' : ''}`}
+              className={`btn-chip action-chip ${enabledActions.has(name) ? 'active' : ''}`}
               onClick={() => toggleAction(name)}
             >
               {name}
             </button>
           ))}
         </div>
-      </section>
+      </AccordionCard>
 
-      {/* 生成按钮 */}
-      <button className="btn btn-compile" onClick={handleCompile}>
-        生成编排
-      </button>
-
-      {/* 设置 */}
-      <button
-        className="btn btn-settings-toggle"
-        onClick={() => setShowSettings(!showSettings)}
-      >
-        {showSettings ? '收起设置 ▲' : '自定义速度/音色 ▼'}
-      </button>
-
-      {showSettings && (
-        <div className="settings-panel">
-          {(Object.keys(prefs.customBpm) as SpeedTier[]).map(tier => (
-            <div key={tier} className="settings-row">
-              <span className="settings-label">{TIER_LABELS[tier]}</span>
-              <input
-                type="range"
-                min={40}
-                max={200}
-                value={prefs.customBpm[tier]}
-                onChange={e => handleBpmChange(tier, parseInt(e.target.value))}
-              />
-              <span className="settings-value">{prefs.customBpm[tier]} BPM</span>
-              <div className="sound-picker">
-                {SOUNDS.map(s => (
-                  <button
-                    key={s.id}
-                    className={`sound-btn ${prefs.customSounds[tier] === s.id ? 'active' : ''}`}
-                    onClick={() => handleSoundChange(tier, s.id)}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-          <div className="settings-row">
-            <span className="settings-label">收尾</span>
+      {/* 手风琴卡片 3：高级设置（默认折叠） */}
+      <AccordionCard title="高级设置" defaultOpen={false}>
+        {(Object.keys(prefs.customBpm) as SpeedTier[]).map(tier => (
+          <div key={tier} className="settings-row">
+            <span className="settings-label">{TIER_LABELS[tier]}</span>
+            <input
+              type="range"
+              min={40}
+              max={200}
+              value={prefs.customBpm[tier]}
+              onChange={e => handleBpmChange(tier, parseInt(e.target.value))}
+            />
+            <span className="settings-value">{prefs.customBpm[tier]} BPM</span>
             <div className="sound-picker">
               {SOUNDS.map(s => (
                 <button
                   key={s.id}
-                  className={`sound-btn ${prefs.customSounds.cooldown === s.id ? 'active' : ''}`}
-                  onClick={() => handleSoundChange('cooldown', s.id)}
+                  className={`btn-chip ${prefs.customSounds[tier] === s.id ? 'active' : ''}`}
+                  onClick={() => handleSoundChange(tier, s.id)}
                 >
                   {s.label}
                 </button>
               ))}
             </div>
           </div>
+        ))}
+        <div className="settings-row">
+          <span className="settings-label">收尾</span>
+          <div className="sound-picker">
+            {SOUNDS.map(s => (
+              <button
+                key={s.id}
+                className={`btn-chip ${prefs.customSounds.cooldown === s.id ? 'active' : ''}`}
+                onClick={() => handleSoundChange('cooldown', s.id)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
-      )}
+      </AccordionCard>
+
+      {/* CTA 按钮 */}
+      <button className="btn-primary btn-compile" onClick={handleCompile}>
+        生成编排
+      </button>
 
       <Footer />
     </div>

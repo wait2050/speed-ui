@@ -1,11 +1,11 @@
 /* ============================================================
-   HistoryDetail 详情页：热力图 + 阶段分布 + AI 指令
+   HistoryDetail 详情页：热力图 + 波动曲线 + AI 调理建议
    ============================================================ */
 
 .history-detail-page {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--space-lg);
   padding: 60px 20px 40px;
   max-width: 640px;
   margin: 0 auto;
@@ -54,16 +54,18 @@
 
 .hd-point-count {
   font-size: 11px;
-  color: #7c4dff;
+  color: var(--phase-core);
   font-weight: 400;
 }
 
 /* ---- 阶段分布条 ---- */
 .hd-phase-bar-section {
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 16px;
-  padding: 16px;
-  backdrop-filter: blur(10px);
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
 }
 
 .hd-phase-bar {
@@ -108,10 +110,12 @@
 
 /* ---- 快感热力图 ---- */
 .hd-heatmap-section {
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 16px;
-  padding: 16px;
-  backdrop-filter: blur(10px);
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
 }
 
 .hd-heatmap-container {
@@ -202,8 +206,9 @@
   transform: translateX(-50%);
   background: rgba(30, 20, 50, 0.95);
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(124, 77, 255, 0.3);
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 10px 14px;
   min-width: 160px;
   z-index: 10;
@@ -218,7 +223,7 @@
 
 .hd-tooltip-time {
   font-size: 11px;
-  color: #7c4dff;
+  color: var(--phase-core);
   font-weight: 600;
   margin-bottom: 4px;
 }
@@ -241,15 +246,34 @@
   background: linear-gradient(135deg, #ff4081, #ff6e40);
   color: #fff;
   padding: 2px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
+}
+
+/* ---- 波动曲线 ---- */
+.pleasure-wave-svg {
+  width: 100%;
+  height: 80px;
+  margin-top: 12px;
+}
+
+.wave-anchor {
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.8));
+  animation: anchorPulse 2s ease-in-out infinite;
+}
+
+@keyframes anchorPulse {
+  0%, 100% { r: 1.5; opacity: 0.8; }
+  50% { r: 2.5; opacity: 1; }
 }
 
 /* ---- 打点明细列表 ---- */
 .hd-points-list-section {
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 16px;
-  padding: 16px;
-  backdrop-filter: blur(10px);
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
 }
 
 .hd-points-list {
@@ -300,12 +324,37 @@
   color: var(--text-secondary);
 }
 
-/* ---- AI 迭代指令 ---- */
+/* ---- AI 区块 ---- */
 .hd-ai-section {
   background: rgba(124, 77, 255, 0.05);
   border: 1px solid rgba(124, 77, 255, 0.15);
-  border-radius: 16px;
-  padding: 16px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 紫色渐变边框效果 */
+.hd-ai-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(124, 77, 255, 0.3), rgba(224, 64, 251, 0.1), transparent);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.hd-warm-advice {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  padding: var(--space) 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: var(--space);
 }
 
 .hd-ai-desc {
@@ -317,7 +366,7 @@
 
 .hd-ai-prompt-box {
   background: rgba(0, 0, 0, 0.3);
-  border-radius: 10px;
+  border-radius: var(--radius);
   padding: 12px;
   max-height: 200px;
   overflow-y: auto;
@@ -338,17 +387,7 @@
   width: 100%;
   padding: 12px;
   font-size: 14px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #7c4dff, #e040fb);
-  color: #fff;
-  border: none;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.hd-copy-btn:hover {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
+  border-radius: var(--radius);
 }
 
 .hd-copy-btn.copied {
@@ -358,34 +397,22 @@
 /* ---- 底部操作 ---- */
 .hd-actions {
   display: flex;
-  gap: 12px;
-  margin-top: 8px;
+  gap: var(--space);
+  margin-top: var(--space-sm);
 }
 
-.hd-actions .btn {
+.hd-actions .btn-secondary,
+.hd-actions .btn-primary {
   flex: 1;
   padding: 14px;
   font-size: 14px;
-  border-radius: 14px;
   text-align: center;
 }
 
 .btn-back {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.btn-back:hover {
-  background: rgba(255, 255, 255, 0.12);
+  /* btn-secondary handles the style */
 }
 
 .btn-load {
-  background: linear-gradient(135deg, #7c4dff, #4fc3f7);
-  color: #fff;
-  border: none;
-}
-
-.btn-load:hover {
-  filter: brightness(1.1);
+  /* btn-primary handles the style */
 }

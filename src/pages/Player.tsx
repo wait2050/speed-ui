@@ -1,5 +1,5 @@
 // ============================================================
-// Player — 极简播放页：引擎驱动 UI，零闭包问题
+// Player — 沉浸式播放页：渐变背景 + 手势覆盖层 + 锁定 + 节拍脉冲
 // ============================================================
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useAppStore } from '../state/store';
@@ -10,6 +10,8 @@ import type { EngineDisplayState } from '../engine/PlaybackEngine';
 import { computePhaseSegments } from '../scheduler/segments';
 import type { PhaseSegment } from '../scheduler/segments';
 import { saveProgress, clearProgress } from '../storage';
+import { audioEngine } from '../audio/engine';
+import { useWakeLock } from '../hooks/useWakeLock';
 import type { Phase } from '../types';
 
 const PHASE_LABELS: Record<Phase, string> = {
@@ -18,19 +20,44 @@ const PHASE_LABELS: Record<Phase, string> = {
   climax: '冲刺', afterglow: '余韵', cooldown: '收尾', landing: '着陆',
 };
 
+/** 安全调用 navigator.vibrate，桌面端静默降级 */
+function triggerHaptic(pattern: number | number[]) {
+  if ('vibrate' in navigator) {
+    try { navigator.vibrate(pattern); } catch {}
+  }
+}
+
 export const Player: React.FC = () => {
   const { compiled, reset, subjectiveClimaxTriggered, setSubjectiveClimax, playbackFinished, addExcitementPoint } = useAppStore();
   const engineRef = useRef<PlaybackEngine | null>(null);
-  const compiledRef = useRef(compiled); // 用 ref 避免 compiled 变更触发 useEffect 重建
+  const compiledRef = useRef(compiled);
   compiledRef.current = compiled;
 
-  // 显示状态（引擎单向推送）
+  // 屏幕常亮（播放期间）
+  useWakeLock(true);
+
+  // 显示状态
   const [ds, setDs] = useState<EngineDisplayState>({
     actionName: '准备开始...', actionRemainingMs: 0,
     totalElapsedMs: 0, phase: 'warmup', isPaused: false,
   });
 
-  // 启动 — 只在组件首次挂载时运行，不因 compiled 引用变化重建
+  // 节拍脉冲
+  const [beatPulse, setBeatPulse] = useState(0);
+  const beatRafRef = useRef<number>(0);
+
+  // 手势状态
+  const [gestureZone, setGestureZone] = useState<'left' | 'right' | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTapTime = useRef(0);
+
+  // 锁定
+  const [isLocked, setIsLocked] = useState(false);
+
+  // 涟漪效果
+  const [ripples, setRipples] = useState<number[]>([]);
+
+  // 启动
   useEffect(() => {
     const c = compiledRef.current;
     if (!c?.timeline?.length) {
@@ -44,10 +71,28 @@ export const Player: React.FC = () => {
     engine.init().then(() => {
       engine.setOnUpdate(setDs);
       engine.setOnFinished(playbackFinished);
+
+      // 节拍回调
+      engine.setOnBeat(() => {
+        setBeatPulse(1);
+        const start = performance.now();
+        const decay = (now: number) => {
+          const elapsed = now - start;
+          const value = Math.max(0, 1 - elapsed / 400);
+          setBeatPulse(value);
+          if (value > 0) beatRafRef.current = requestAnimationFrame(decay);
+        };
+        beatRafRef.current = requestAnimationFrame(decay);
+      });
+
       engine.start(c.timeline);
     });
 
-    return () => { engine.destroy(); engineRef.current = null; };
+    return () => {
+      engine.destroy();
+      engineRef.current = null;
+      cancelAnimationFrame(beatRafRef.current);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 暂停
@@ -73,7 +118,7 @@ export const Player: React.FC = () => {
     return () => clearInterval(iv);
   }, [compiled]);
 
-  // 操作（直接调引擎，零闭包依赖）
+  // 操作
   const togglePause = useCallback(() => {
     const e = engineRef.current; if (!e) return;
     e.isPaused ? e.resume() : e.pause();
@@ -90,36 +135,43 @@ export const Player: React.FC = () => {
     setSubjectiveClimax(false);
   }, [reset, setSubjectiveClimax]);
 
-  // 双向自适应盲控控制器状态和事件
+  // 盲控
   const [isExcited, setIsExcited] = useState(false);
   const [offsetX, setOffsetX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const touchStartRef = useRef(0);
   const exciteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const addRipple = useCallback(() => {
+    const id = Date.now();
+    setRipples(prev => [...prev, id]);
+    setTimeout(() => setRipples(prev => prev.filter(r => r !== id)), 800);
+  }, []);
+
   const handleExcitement = useCallback(() => {
     engineRef.current?.recordExcitement(ds.actionName);
-    // 实时推送打点到 Zustand store
     const point = engineRef.current?.getLastExcitementPoint();
     if (point) addExcitementPoint(point);
     setIsExcited(true);
+    addRipple();
+    triggerHaptic([20, 10, 20]);
+    audioEngine.playChimeSound();
     if (exciteTimerRef.current) clearTimeout(exciteTimerRef.current);
-    exciteTimerRef.current = setTimeout(() => {
-      setIsExcited(false);
-    }, 800);
-  }, [ds.actionName, addExcitementPoint]);
+    exciteTimerRef.current = setTimeout(() => setIsExcited(false), 800);
+  }, [ds.actionName, addExcitementPoint, addRipple]);
 
   const handleClimaxOrAfterglow = useCallback(() => {
     if (ds.phase !== 'climax') {
       engineRef.current?.triggerSubjectiveClimax('捏住并旋转');
       setSubjectiveClimax(true);
+      triggerHaptic([50, 30, 50, 30, 100]);
     } else {
       engineRef.current?.triggerReleaseAfterglow('提拉然后松手');
       setSubjectiveClimax(false);
     }
   }, [ds.phase, setSubjectiveClimax]);
 
-  // 触屏手势绑定 — 左滑(兴奋打点)全阶段可用，右滑(冲刺)仅在热身后
+  // 触屏手势
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartRef.current = e.touches[0].clientX;
     setIsDragging(true);
@@ -138,16 +190,43 @@ export const Player: React.FC = () => {
     if (!isDragging) return;
     setIsDragging(false);
     if (offsetX < -60) {
-      // 左滑：兴奋打点（所有阶段均可）
       handleExcitement();
     } else if (offsetX > 60 && ds.phase !== 'warmup') {
-      // 右滑：冲刺/释放（热身期间禁用）
       handleClimaxOrAfterglow();
     }
     setOffsetX(0);
   }, [isDragging, ds.phase, offsetX, handleExcitement, handleClimaxOrAfterglow]);
 
-  // 键盘操作绑定 — ArrowLeft(打点)全阶段可用，ArrowRight(冲刺)热身禁用
+  // 全屏手势覆盖层
+  const handleGestureStart = useCallback((e: React.TouchEvent) => {
+    const x = e.touches[0].clientX;
+    const screenWidth = window.innerWidth;
+    setGestureZone(x < screenWidth / 2 ? 'left' : 'right');
+
+    longPressTimer.current = setTimeout(() => {
+      if (ds.phase !== 'climax') {
+        engineRef.current?.triggerSubjectiveClimax('捏住并旋转');
+        setSubjectiveClimax(true);
+        triggerHaptic([50, 30, 50, 30, 100]);
+      }
+    }, 1500);
+  }, [ds.phase, setSubjectiveClimax]);
+
+  const handleGestureEnd = useCallback(() => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+
+    const now = Date.now();
+    if (now - lastTapTime.current < 300) {
+      handleExcitement();
+      lastTapTime.current = 0;
+    } else {
+      lastTapTime.current = now;
+    }
+
+    setGestureZone(null);
+  }, [handleExcitement]);
+
+  // 键盘操作
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') {
@@ -155,12 +234,15 @@ export const Player: React.FC = () => {
         const point = engineRef.current?.getLastExcitementPoint();
         if (point) addExcitementPoint(point);
         setIsExcited(true);
+        addRipple();
+        triggerHaptic([20, 10, 20]);
         if (exciteTimerRef.current) clearTimeout(exciteTimerRef.current);
         exciteTimerRef.current = setTimeout(() => setIsExcited(false), 800);
       } else if (e.key === 'ArrowRight' && ds.phase !== 'warmup') {
         if (ds.phase !== 'climax') {
           engineRef.current?.triggerSubjectiveClimax('捏住并旋转');
           setSubjectiveClimax(true);
+          triggerHaptic([50, 30, 50, 30, 100]);
         } else {
           engineRef.current?.triggerReleaseAfterglow('提拉然后松手');
           setSubjectiveClimax(false);
@@ -172,7 +254,7 @@ export const Player: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown);
       if (exciteTimerRef.current) clearTimeout(exciteTimerRef.current);
     };
-  }, [ds.phase, ds.actionName, setSubjectiveClimax, addExcitementPoint]);
+  }, [ds.phase, ds.actionName, setSubjectiveClimax, addExcitementPoint, addRipple]);
 
   const segments: PhaseSegment[] = useMemo(
     () => compiled ? computePhaseSegments(compiled.timeline) : [],
@@ -181,11 +263,33 @@ export const Player: React.FC = () => {
   const totalMs = compiled?.stats?.totalDuration || 0;
 
   if (!compiled) {
-    return <div className="page player-page"><p style={{ color: '#8888aa' }}>加载失败</p></div>;
+    return <div className="page player-page"><p style={{ color: 'var(--text-secondary)' }}>加载失败</p></div>;
   }
 
   return (
-    <div className={`page player-page ${subjectiveClimaxTriggered || ds.phase === 'climax' ? 'climax-active' : ''} ${isExcited ? 'excited-flash' : ''}`}>
+    <div
+      className={`page player-page ${subjectiveClimaxTriggered || ds.phase === 'climax' ? 'climax-active' : ''}`}
+      data-phase={ds.phase}
+    >
+      {/* 涟漪效果 */}
+      {ripples.map(id => (
+        <div key={id} className="excited-ripple" />
+      ))}
+
+      {/* 全屏手势覆盖层 */}
+      <div
+        className="gesture-overlay"
+        onTouchStart={handleGestureStart}
+        onTouchEnd={handleGestureEnd}
+      >
+        <div className={`gesture-indicator left ${gestureZone === 'left' ? 'visible' : ''}`}>
+          <div className="gesture-bar" />
+        </div>
+        <div className={`gesture-indicator right ${gestureZone === 'right' ? 'visible' : ''}`}>
+          <div className="gesture-bar" />
+        </div>
+      </div>
+
       <ProgressBar
         segments={segments}
         elapsedMs={ds.totalElapsedMs}
@@ -195,9 +299,9 @@ export const Player: React.FC = () => {
       />
       <div className="player-phase">{PHASE_LABELS[ds.phase] ?? ds.phase}</div>
       <div className="player-action-name">{ds.actionName}</div>
-      <Timer remainingMs={ds.actionRemainingMs} totalMs={ds.actionRemainingMs || 60000} />
+      <Timer remainingMs={ds.actionRemainingMs} totalMs={ds.actionRemainingMs || 60000} beatPulse={beatPulse} />
 
-      {/* 凹槽滑块卡圈 SubjectiveSlider 双向自适应盲控控制器 */}
+      {/* 滑轨 */}
       <div className="subjective-slider">
         <div className="slider-track-glow" />
         <div className="slider-label slider-label-left">⚡ 极度兴奋 (左滑/←)</div>
@@ -215,11 +319,42 @@ export const Player: React.FC = () => {
         </div>
       </div>
 
-      <div className="player-controls">
-        <button className="btn btn-pause" onClick={togglePause}>
-          {ds.isPaused ? '▶ 继续' : '⏸ 暂停'}
+      {/* 锁定按钮 */}
+      <button
+        className={`lock-toggle ${isLocked ? 'locked' : ''}`}
+        onClick={() => setIsLocked(!isLocked)}
+      >
+        {isLocked ? (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="11" width="18" height="11" rx="2"/>
+            <path d="M7 11V7a5 5 0 0110 0v4"/>
+          </svg>
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="11" width="18" height="11" rx="2"/>
+            <path d="M7 11V7a5 5 0 019.9-1"/>
+          </svg>
+        )}
+      </button>
+
+      <div className={`player-controls ${isLocked ? 'controls-locked' : ''}`}>
+        {isLocked && <div className="controls-lock-overlay" />}
+        <button className="btn-secondary btn-icon" onClick={togglePause}>
+          {ds.isPaused ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 4h4v16H6zM14 4h4v16h-4z"/>
+            </svg>
+          )}
         </button>
-        <button className="btn btn-stop" onClick={handleStop}>■ 停止</button>
+        <button className="btn-secondary btn-icon btn-icon-sm" onClick={handleStop}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="6" width="12" height="12" rx="2"/>
+          </svg>
+        </button>
       </div>
     </div>
   );

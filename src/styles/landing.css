@@ -1,11 +1,11 @@
 /* ============================================================
-   Landing 页：呼吸灯 + 评分 + 收藏
+   Landing 页：三层呼吸灯 + 评分 + 收藏
    ============================================================ */
 
 .landing-page {
   justify-content: center;
   align-items: center;
-  gap: 24px;
+  gap: var(--space-lg);
 }
 
 /* ---- Breathing ---- */
@@ -13,15 +13,31 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-md);
 }
 
-.breathing-circle {
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(233,69,96,0.3), rgba(233,69,96,0.05));
-  animation: breathe 4s ease-in-out infinite;
+.breathing-svg {
+  width: 240px;
+  height: 240px;
+}
+
+.breath-layer {
+  transform-origin: center;
+}
+
+.breath-slow {
+  animation: breathPulse 6s ease-in-out infinite;
+}
+.breath-medium {
+  animation: breathPulse 4s ease-in-out infinite 0.5s;
+}
+.breath-fast {
+  animation: breathPulse 3s ease-in-out infinite 1s;
+}
+
+@keyframes breathPulse {
+  0%, 100% { transform: scale(0.8); opacity: 0.4; }
+  50% { transform: scale(1.3); opacity: 0.9; }
 }
 
 .breathing-text {
@@ -32,7 +48,7 @@
 
 .breathing-sub {
   font-size: 12px;
-  color: rgba(255,255,255,0.2);
+  color: var(--text-tertiary);
 }
 
 /* ---- Rating ---- */
@@ -51,14 +67,25 @@
 .star {
   background: none;
   border: none;
-  font-size: 36px;
   cursor: pointer;
+  transition: all var(--duration) var(--ease-spring);
   color: var(--border);
-  transition: color 0.15s;
+}
+
+.star svg {
+  width: 36px;
+  height: 36px;
 }
 
 .star.active {
-  color: #f1c40f;
+  color: #fbbf24;
+  animation: starPop 0.4s var(--ease-spring);
+}
+
+@keyframes starPop {
+  0% { transform: scale(0.5); }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); }
 }
 
 .star:disabled {
@@ -69,7 +96,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: var(--space);
   width: 100%;
   max-width: 300px;
 }
@@ -83,19 +110,26 @@
   width: 100%;
   padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
   background: var(--bg-elevated);
+  backdrop-filter: blur(8px);
   color: var(--text-primary);
   font-size: 14px;
   text-align: center;
   outline: none;
+  transition: border-color var(--duration-fast);
 }
 
 .fav-input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.fav-input::placeholder {
+  color: var(--text-tertiary);
 }
 
 .fav-buttons {
   display: flex;
-  gap: 12px;
+  gap: var(--space);
 }

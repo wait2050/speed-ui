@@ -1,11 +1,51 @@
 /* ============================================================
-   Player 页：阶段标签 + 动作名 + 计时器 + 进度条 + 控制
+   Player 页：沉浸渐变背景 + 计时器 + 进度条 + 手势覆盖层 + 锁定
    ============================================================ */
 
 .player-page {
   justify-content: center;
   gap: 20px;
   position: relative;
+  overflow: hidden;
+}
+
+/* 背景氛围层 - 根据阶段切换 */
+.player-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.15;
+  transition: background 1.5s var(--ease-in-out);
+  pointer-events: none;
+}
+
+.player-page[data-phase="warmup"]::before {
+  background: radial-gradient(ellipse at 50% 30%, var(--phase-warmup), transparent 70%);
+}
+.player-page[data-phase="core"]::before {
+  background: radial-gradient(ellipse at 50% 30%, var(--phase-core), transparent 70%);
+}
+.player-page[data-phase="sprint_start"]::before,
+.player-page[data-phase="sprint_accel"]::before,
+.player-page[data-phase="sprint_peak"]::before {
+  background: radial-gradient(ellipse at 50% 30%, var(--phase-sprint-accel), transparent 70%);
+}
+.player-page[data-phase="climax"]::before {
+  background: radial-gradient(ellipse at 50% 40%, var(--phase-climax), var(--warm-start) 40%, transparent 70%);
+  opacity: 0.25;
+}
+.player-page[data-phase="afterglow"]::before {
+  background: radial-gradient(ellipse at 50% 30%, var(--phase-afterglow), transparent 70%);
+}
+.player-page[data-phase="cooldown"]::before {
+  background: radial-gradient(ellipse at 50% 30%, var(--phase-cooldown), transparent 70%);
+}
+
+/* 所有内容在氛围层之上 */
+.player-page > * {
+  position: relative;
+  z-index: 1;
 }
 
 .player-phase {
@@ -15,13 +55,25 @@
   text-transform: uppercase;
 }
 
+/* 动作名渐变色文字 */
 .player-action-name {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 300;
   text-align: center;
   line-height: 1.3;
   max-width: 320px;
-  color: var(--text-primary);
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  transition: all var(--duration) var(--ease-out);
+}
+
+/* Climax 阶段切换为暖色渐变 */
+.player-page[data-phase="climax"] .player-action-name {
+  background: var(--warm-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
 }
 
 /* ---- Timer ---- */
@@ -43,7 +95,10 @@
   transform: translate(-50%, -50%);
   font-size: 48px;
   font-weight: 200;
-  color: var(--accent);
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 /* ---- Player Controls ---- */
@@ -51,6 +106,7 @@
   display: flex;
   gap: 12px;
   margin-top: 12px;
+  position: relative;
 }
 
 /* ---- Progress Bar ---- */
@@ -110,106 +166,145 @@
   justify-content: space-between;
   margin-top: 4px;
   font-size: 10px;
-  color: rgba(255,255,255,0.2);
+  color: var(--text-tertiary);
 }
 
 .progress-phase-label {
   color: rgba(255,255,255,0.3);
 }
 
-/* ---- Emergency (deprecated, kept for compat) ---- */
-.emergency-btn {
-  position: fixed;
-  bottom: calc(20px + var(--safe-bottom));
-  right: 20px;
-  width: 44px;
-  height: 44px;
+/* ---- 兴奋涟漪（替代全屏闪红） ---- */
+.excited-ripple {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.03);
-  border: none;
+  background: var(--accent-gradient);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 10;
+  animation: rippleExpand 0.8s var(--ease-out) forwards;
+}
+
+@keyframes rippleExpand {
+  0% {
+    width: 10px; height: 10px;
+    opacity: 0.8;
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.6);
+  }
+  100% {
+    width: 300px; height: 300px;
+    opacity: 0;
+    box-shadow: 0 0 60px rgba(168, 85, 247, 0);
+  }
+}
+
+/* Climax 活跃呼吸光 */
+.player-page.climax-active {
+  animation: purpleEdgeBreath 3s infinite alternate;
+}
+
+@keyframes purpleEdgeBreath {
+  0% {
+    box-shadow: inset 0 0 15px rgba(168, 85, 247, 0.15);
+  }
+  100% {
+    box-shadow: inset 0 0 45px rgba(168, 85, 247, 0.35);
+  }
+}
+
+/* ---- 手势覆盖层 ---- */
+.gesture-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: transparent;
+}
+
+/* 侧边霓虹刻度条 */
+.gesture-indicator {
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  width: 3px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.gesture-indicator.left { left: 8px; }
+.gesture-indicator.right { right: 8px; }
+
+.gesture-indicator.visible {
+  opacity: 1;
+}
+
+.gesture-bar {
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(180deg,
+    var(--phase-warmup) 0%,
+    var(--phase-core) 33%,
+    var(--phase-sprint-accel) 66%,
+    var(--phase-climax) 100%
+  );
+  box-shadow: 0 0 8px rgba(124, 77, 255, 0.4);
+}
+
+/* ---- 锁定按钮 ---- */
+.lock-toggle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 100;
-  transition: all 0.3s;
+  transition: all var(--duration) var(--ease-spring);
 }
 
-.emergency-btn.visible {
-  width: auto;
-  height: auto;
-  border-radius: 12px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  padding: 16px;
-  bottom: 50%;
-  right: 50%;
-  transform: translate(50%, 50%);
+.lock-toggle:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
 }
 
-.emergency-hint {
-  font-size: 10px;
-  color: rgba(255,255,255,0.1);
+.lock-toggle.locked {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-dim);
 }
 
-.emergency-confirm {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.controls-locked {
+  position: relative;
 }
 
-.emergency-confirm p {
-  font-size: 14px;
-  color: var(--text-secondary);
+.controls-lock-overlay {
+  position: absolute;
+  inset: -8px;
+  border-radius: var(--radius-lg);
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 3;
+  cursor: not-allowed;
+}
+
+.player-controls.controls-locked {
+  opacity: 0.3;
+  pointer-events: none;
 }
 
 /* ============================================================
-   双核心自适应盲控滑轨 SubjectiveSlider 样式与呼吸霓虹暗火特效
+   双核心自适应盲控滑轨 SubjectiveSlider
    ============================================================ */
 
-/* 1. 高能暗火色边缘呼吸光效应与闪烁泛光反馈 */
-.player-page.climax-active {
-  animation: redEdgeBreath 3s infinite alternate;
-}
-
-@keyframes redEdgeBreath {
-  0% {
-    box-shadow: inset 0 0 15px rgba(239, 68, 68, 0.15);
-  }
-  100% {
-    box-shadow: inset 0 0 45px rgba(239, 68, 68, 0.45);
-  }
-}
-
-/* 盲操打点强视觉感官闪烁泛光反馈。800ms 内触发一次全屏爆发闪烁 */
-.player-page.excited-flash::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: radial-gradient(circle, rgba(239, 68, 68, 0.1) 0%, transparent 75%);
-  pointer-events: none;
-  animation: excitedFlashEffect 0.8s ease-out forwards;
-  z-index: 10;
-}
-
-@keyframes excitedFlashEffect {
-  0% {
-    opacity: 0;
-  }
-  15% {
-    opacity: 1;
-    box-shadow: inset 0 0 50px rgba(239, 68, 68, 0.5);
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
-/* 2. 双向滑动凹槽滑轨 SubjectiveSlider 布局与样式 */
 .subjective-slider {
   position: relative;
   display: flex;
@@ -220,17 +315,16 @@
   height: 48px;
   margin: 20px auto;
   padding: 0 16px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 24px;
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(255, 255, 255, 0.02);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-inset), 0 1px 3px rgba(255, 255, 255, 0.02);
   backdrop-filter: blur(10px);
   overflow: visible;
   user-select: none;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transition: all var(--duration) var(--ease-out);
 }
 
-/* 热身半透明灰色不可拉拽状态 */
 .subjective-slider.disabled {
   opacity: 0.25;
   pointer-events: none;
@@ -245,10 +339,10 @@
   left: 0;
   right: 0;
   bottom: 0;
-  border-radius: 24px;
+  border-radius: var(--radius-xl);
   pointer-events: none;
   opacity: 0.15;
-  background: linear-gradient(90deg, rgba(239, 68, 68, 0.2) 0%, transparent 50%, rgba(239, 68, 68, 0.2) 100%);
+  background: linear-gradient(90deg, rgba(168, 85, 247, 0.2) 0%, transparent 50%, rgba(236, 72, 153, 0.2) 100%);
   transition: opacity 0.3s;
 }
 
@@ -271,14 +365,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.1s ease-out; /* 实时手指跟随，onTouchEnd 回弹时可以短暂变成 linear/cubic-bezier */
+  transition: transform 0.1s ease-out;
 }
 
 .slider-handle:active {
   cursor: grabbing;
   background: linear-gradient(135deg, #555 0%, #2a2a2a 100%);
   border-color: rgba(255, 255, 255, 0.35);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.8), 0 0 10px rgba(239, 68, 68, 0.3);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.8), 0 0 10px rgba(168, 85, 247, 0.3);
 }
 
 .slider-handle-inner {
@@ -291,8 +385,8 @@
 }
 
 .climax-active .slider-handle-inner {
-  background: #ef4444;
-  box-shadow: 0 0 8px #ef4444;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
 }
 
 /* 左右说明文案 */
@@ -324,4 +418,3 @@
 .slider-handle[style*="translateX("]:not([style*="translateX(-"]):not([style*="translateX(0px"]) ~ .slider-label-left {
   opacity: 0.2;
 }
-

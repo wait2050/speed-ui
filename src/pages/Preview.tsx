@@ -85,20 +85,20 @@ export const Preview: React.FC = () => {
 
       {/* 统计概览 */}
       <div className="stats-grid">
-        <div className="stat-item">
-          <span className="stat-value">{formatMs(stats.totalDuration)}</span>
+        <div className="glass-card stat-item">
+          <span className="stat-number">{formatMs(stats.totalDuration)}</span>
           <span className="stat-label">总时长</span>
         </div>
-        <div className="stat-item">
-          <span className="stat-value">{formatMs(stats.totalActionDuration)}</span>
+        <div className="glass-card stat-item">
+          <span className="stat-number">{formatMs(stats.totalActionDuration)}</span>
           <span className="stat-label">动作总时长</span>
         </div>
-        <div className="stat-item">
-          <span className="stat-value">{formatMs(stats.totalRestDuration)}</span>
+        <div className="glass-card stat-item">
+          <span className="stat-number">{formatMs(stats.totalRestDuration)}</span>
           <span className="stat-label">休息总时长</span>
         </div>
-        <div className="stat-item">
-          <span className="stat-value">{stats.rounds}</span>
+        <div className="glass-card stat-item">
+          <span className="stat-number">{stats.rounds}</span>
           <span className="stat-label">总轮数</span>
         </div>
       </div>
@@ -180,13 +180,13 @@ export const Preview: React.FC = () => {
 
       {/* 操作按钮 */}
       <div className="preview-actions">
-        <button className="btn btn-start" onClick={handleStart}>
+        <button className="btn-primary btn-start" onClick={handleStart}>
           开始
         </button>
-        <button className="btn btn-recompile" onClick={handleRecompile}>
+        <button className="btn-secondary btn-recompile" onClick={handleRecompile}>
           重新编排（保留锁定）
         </button>
-        <button className="btn btn-recompile" onClick={handleReset} style={{ flex: 'none', padding: '16px 16px', fontSize: 13 }}>
+        <button className="btn-secondary btn-recompile" onClick={handleReset} style={{ flex: 'none', padding: '16px 16px', fontSize: 13 }}>
           放弃
         </button>
       </div>

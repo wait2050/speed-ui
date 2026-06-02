@@ -186,6 +186,37 @@ export class AudioEngine {
     this.initialized = false;
   }
 
+  /** 播放空灵风铃音效（FM 调频合成） */
+  async playChimeSound(): Promise<void> {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+
+    const carrier = this.ctx.createOscillator();
+    carrier.type = 'sine';
+    carrier.frequency.setValueAtTime(1200, now);
+    carrier.frequency.exponentialRampToValueAtTime(800, now + 0.3);
+
+    const modulator = this.ctx.createOscillator();
+    modulator.type = 'sine';
+    modulator.frequency.setValueAtTime(2400, now);
+
+    const modGain = this.ctx.createGain();
+    modGain.gain.setValueAtTime(600, now);
+    modGain.gain.exponentialRampToValueAtTime(1, now + 0.4);
+
+    const envelope = this.ctx.createGain();
+    envelope.gain.setValueAtTime(0.15, now);
+    envelope.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+
+    modulator.connect(modGain).connect(carrier.frequency);
+    carrier.connect(envelope).connect(this.ctx.destination);
+
+    carrier.start(now);
+    modulator.start(now);
+    carrier.stop(now + 0.5);
+    modulator.stop(now + 0.5);
+  }
+
   // --- 信号音合成 ---
   private makeDing(count: 1 | 2): AudioBuffer {
     const sampleRate = 44100;

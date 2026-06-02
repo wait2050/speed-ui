@@ -3,6 +3,8 @@
    所有样式按模块拆分，通过 @import 聚合
    ============================================================ */
 
+@import "tailwindcss";
+
 @import './styles/global.css';
 @import './styles/buttons.css';
 @import './styles/home.css';

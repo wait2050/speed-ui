@@ -1,7 +1,7 @@
 // ============================================================
 // App — 状态驱动页面路由 + 侧边栏
 // ============================================================
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAppStore } from './state/store';
 import { Home } from './pages/Home';
 import { Preview } from './pages/Preview';
@@ -17,6 +17,19 @@ import './index.css';
 const AppInner: React.FC = () => {
   const { status, compiled, compilationDone, startPlaying } = useAppStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // 页面转场遮罩
+  const [transitioning, setTransitioning] = useState(false);
+  const prevStatus = useRef(status);
+
+  useEffect(() => {
+    if (prevStatus.current !== status) {
+      setTransitioning(true);
+      const timer = setTimeout(() => setTransitioning(false), 300);
+      prevStatus.current = status;
+      return () => clearTimeout(timer);
+    }
+  }, [status]);
 
   // 检测未完成编排
   React.useEffect(() => {
@@ -65,9 +78,17 @@ const AppInner: React.FC = () => {
 
   return (
     <>
+      {/* 转场遮罩 */}
+      <div className={`page-transition-overlay ${transitioning ? 'active' : ''}`} />
+
       {showHamburger && (
         <button className="btn-hamburger" onClick={() => setSidebarOpen(true)}>
-          ☰
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="17" y2="12"/>
+            <line x1="3" y1="18" x2="13" y2="18"/>
+          </svg>
         </button>
       )}
 

@@ -1,18 +1,19 @@
 /* ============================================================
-   通用按钮
+   通用按钮系统 — Linear / Vercel 极简暗色美学
    ============================================================ */
 
+/* ---- 基础按钮 ---- */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 14px 32px;
   border: none;
-  border-radius: 40px;
+  border-radius: var(--radius);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration) var(--ease-spring);
   letter-spacing: 1px;
   background: var(--bg-elevated);
   color: var(--text-primary);
@@ -20,7 +21,7 @@
 
 .btn:active {
   transform: scale(0.96);
-  opacity: 0.8;
+  transition-duration: var(--duration-fast);
 }
 
 .btn:disabled {
@@ -28,86 +29,271 @@
   cursor: not-allowed;
 }
 
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- 主按钮 (Primary) ---- */
+.btn-primary {
+  background: var(--accent-gradient);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 14px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  box-shadow: var(--shadow), var(--shadow-glow);
+  transition: all var(--duration) var(--ease-spring);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.15);
+  box-shadow: var(--shadow-lg), 0 0 30px rgba(168, 85, 247, 0.5);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: scale(0.96) translateY(0);
+  transition-duration: var(--duration-fast);
+}
+
+.btn-primary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn-primary:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  filter: none;
+  box-shadow: none;
+}
+
+/* ---- 次按钮 (Secondary / Ghost) ---- */
+.btn-secondary {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--duration) var(--ease-spring);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+  backdrop-filter: blur(25px);
+}
+
+.btn-secondary:active {
+  transform: scale(0.97);
+}
+
+.btn-secondary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- 危险按钮 (Danger) ---- */
+.btn-danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius);
+  padding: 12px 24px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all var(--duration) var(--ease-spring);
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* ---- Toggle / Chip 按钮 ---- */
+.btn-chip {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.btn-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.btn-chip:hover:not(.active) {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+/* ---- 遗留类名兼容 ---- */
 .btn-init,
 .btn-compile {
-  background: var(--accent);
+  background: var(--accent-gradient);
   color: #fff;
   width: 100%;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-md);
+  box-shadow: var(--shadow), var(--shadow-glow);
+}
+
+.btn-compile:hover {
+  filter: brightness(1.15);
+  box-shadow: var(--shadow-lg), 0 0 30px rgba(168, 85, 247, 0.5);
+  transform: translateY(-1px);
 }
 
 .btn-settings-toggle {
-  background: transparent;
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
   color: var(--text-secondary);
   border: 1px solid var(--border);
   font-size: 13px;
   padding: 10px 20px;
-  margin-top: 12px;
+  margin-top: var(--space);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all var(--duration) var(--ease-spring);
+}
+
+.btn-settings-toggle:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
 }
 
 .btn-start {
-  background: var(--accent);
+  background: var(--accent-gradient);
   color: #fff;
   flex: 1;
   font-size: 18px;
   padding: 16px 32px;
+  box-shadow: var(--shadow), var(--shadow-glow);
+}
+
+.btn-start:hover {
+  filter: brightness(1.15);
+  box-shadow: var(--shadow-lg), 0 0 30px rgba(168, 85, 247, 0.5);
+  transform: translateY(-1px);
 }
 
 .btn-recompile,
 .btn-skip,
 .btn-cancel {
-  background: transparent;
-  color: var(--text-secondary);
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  color: var(--text-primary);
   border: 1px solid var(--border);
+}
+
+.btn-recompile:hover,
+.btn-skip:hover,
+.btn-cancel:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
 }
 
 .btn-save {
-  background: var(--accent);
+  background: var(--accent-gradient);
   color: #fff;
-}
-
-.btn-danger {
-  background: #c0392b;
-  color: #fff;
+  box-shadow: var(--shadow), var(--shadow-glow);
 }
 
 .btn-end-early {
-  background: transparent;
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
   color: var(--text-secondary);
   border: 1px solid var(--border);
-  margin-top: 32px;
+  margin-top: var(--space-xl);
   font-size: 13px;
   padding: 10px 24px;
 }
 
+.btn-end-early:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+
 .btn-home,
 .btn-done {
-  background: var(--accent);
+  background: var(--accent-gradient);
   color: #fff;
-  margin-top: 24px;
+  margin-top: var(--space-lg);
+  box-shadow: var(--shadow), var(--shadow-glow);
 }
 
 /* Player 控制按钮 */
 .btn-pause {
-  background: var(--bg-elevated);
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   color: var(--text-primary);
   min-height: 44px;
   min-width: 100px;
   padding: 12px 28px;
   border: 1px solid var(--border);
-  border-radius: 24px;
+  border-radius: var(--radius);
   font-size: 16px;
   cursor: pointer;
+  transition: all var(--duration) var(--ease-spring);
+}
+
+.btn-pause:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+
+.btn-pause:active {
+  transform: scale(0.97);
 }
 
 .btn-stop {
-  background: transparent;
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   color: var(--text-secondary);
   min-height: 44px;
   min-width: 80px;
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid var(--border);
   padding: 12px 20px;
-  border-radius: 24px;
+  border-radius: var(--radius);
   font-size: 16px;
   cursor: pointer;
+  transition: all var(--duration) var(--ease-spring);
+}
+
+.btn-stop:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+
+.btn-stop:active {
+  transform: scale(0.97);
+}
+
+/* ---- Icon Button ---- */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+.btn-icon-sm {
+  padding: 8px 12px;
+  min-width: 40px;
 }

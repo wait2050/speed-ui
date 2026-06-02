@@ -14,11 +14,8 @@
 }
 
 .stat-item {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px;
   text-align: center;
+  padding: var(--space-md);
 }
 
 .stat-value {
@@ -55,9 +52,17 @@
 
 .preview-actions {
   display: flex;
-  gap: 12px;
+  gap: var(--space);
   width: 100%;
-  margin-top: 8px;
+  margin-top: var(--space-sm);
+}
+
+.preview-actions .btn-start {
+  flex: 2;
+}
+
+.preview-actions .btn-recompile {
+  flex: 1;
 }
 
 /* ---- 只读序列列表 ---- */
@@ -141,6 +146,10 @@
   background: rgba(255,255,255,0.015);
 }
 
+.edit-action-row.snap-row {
+  background: rgba(255, 200, 50, 0.04);
+}
+
 .rest-name {
   color: var(--text-secondary);
   font-style: italic;
@@ -193,6 +202,12 @@
 
 .edit-action-options {
   padding: 6px 10px 10px 34px;
+  animation: slideDown 0.2s var(--ease-out);
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .replace-label {

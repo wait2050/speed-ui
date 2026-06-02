@@ -1,5 +1,5 @@
 // ============================================================
-// HistoryDetail — 历史详情全屏页：快感热力图 + AI 迭代指令
+// HistoryDetail — 历史详情全屏页：热力图 + 波动曲线 + AI 调理建议
 // ============================================================
 import React, { useState, useMemo, useCallback } from 'react';
 import { useAppStore } from '../state/store';
@@ -31,6 +31,61 @@ function formatMs(ms: number): string {
   return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
+// 生成贝塞尔插值曲线数据
+const generatePleasureCurve = (points: ExcitementPoint[], totalMs: number): string => {
+  if (points.length === 0) return '';
+
+  const width = 100;
+  const height = 60;
+  const dataPoints = points.map(p => ({
+    x: (p.elapsedMs / totalMs) * width,
+    y: height - (p.bpm / 200) * height,
+  }));
+
+  if (dataPoints.length === 1) {
+    return `M ${dataPoints[0].x} ${height} L ${dataPoints[0].x} ${dataPoints[0].y}`;
+  }
+
+  let path = `M 0 ${height} L ${dataPoints[0].x} ${dataPoints[0].y}`;
+  for (let i = 0; i < dataPoints.length - 1; i++) {
+    const curr = dataPoints[i];
+    const next = dataPoints[i + 1];
+    const cpx1 = curr.x + (next.x - curr.x) * 0.4;
+    const cpy1 = curr.y;
+    const cpx2 = curr.x + (next.x - curr.x) * 0.6;
+    const cpy2 = next.y;
+    path += ` C ${cpx1} ${cpy1}, ${cpx2} ${cpy2}, ${next.x} ${next.y}`;
+  }
+  path += ` L ${width} ${height} Z`;
+  return path;
+};
+
+// AI 调理建议
+const generateWarmAdvice = (points: ExcitementPoint[]): string => {
+  if (points.length === 0) return '本次体验暂无打点记录，下次可以尝试在感到愉悦时双击屏幕记录，帮助我们为您精准定制编排。';
+
+  const actionCounts: Record<string, number> = {};
+  const phaseCounts: Record<string, number> = {};
+  points.forEach(p => {
+    actionCounts[p.actionName] = (actionCounts[p.actionName] || 0) + 1;
+    phaseCounts[p.phase] = (phaseCounts[p.phase] || 0) + 1;
+  });
+
+  const topAction = Object.entries(actionCounts).sort((a, b) => b[1] - a[1])[0];
+  const topPhase = Object.entries(phaseCounts).sort((a, b) => b[1] - a[1])[0];
+
+  const advice = [
+    `系统检测发现在 ${PHASE_LABELS[topPhase[0] as Phase] ?? topPhase[0]} 阶段的「${topAction[0]}」时您的打点非常高频（${topAction[1]} 次），`,
+    `您的身体对此频率和动作组合高度敏感。下次编排已为您自动提高此动作的出现权重 15%。`,
+  ];
+
+  if (points.length >= 3) {
+    advice.push(`本次共 ${points.length} 个极爽打点，愉悦密度较高，建议保持当前时长设定。`);
+  }
+
+  return advice.join('');
+};
+
 export const HistoryDetail: React.FC = () => {
   const { selectedHistoryId, reset } = useAppStore();
   const [tooltip, setTooltip] = useState<{ point: ExcitementPoint; x: number } | null>(null);
@@ -44,6 +99,16 @@ export const HistoryDetail: React.FC = () => {
 
   const excitementPoints = entry?.stats?.excitementPoints ?? [];
   const totalDurationMs = ((entry?.totalDuration ?? 0) * 1000) || (entry?.stats?.totalDuration ?? 1);
+
+  const curvePath = useMemo(
+    () => generatePleasureCurve(excitementPoints, totalDurationMs),
+    [excitementPoints, totalDurationMs]
+  );
+
+  const warmAdvice = useMemo(
+    () => generateWarmAdvice(excitementPoints),
+    [excitementPoints]
+  );
 
   const handlePointClick = useCallback((point: ExcitementPoint, e: React.MouseEvent) => {
     const rect = (e.currentTarget as HTMLElement).parentElement?.getBoundingClientRect();
@@ -61,7 +126,7 @@ export const HistoryDetail: React.FC = () => {
     compilationDone(entry.sequence);
   }, [entry]);
 
-  // 生成 AI 迭代指令
+  // AI 迭代指令
   const aiPrompt = useMemo(() => {
     if (!entry) return '';
     const durMin = Math.round((entry.totalDuration || 0) / 60);
@@ -95,7 +160,6 @@ ${pointsList || '（本次无打点记录）'}
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      // fallback
       const ta = document.createElement('textarea');
       ta.value = aiPrompt;
       document.body.appendChild(ta);
@@ -110,8 +174,8 @@ ${pointsList || '（本次无打点记录）'}
   if (!entry) {
     return (
       <div className="page history-detail-page">
-        <p style={{ color: '#8888aa' }}>未找到该历史记录</p>
-        <button className="btn btn-back" onClick={handleBack}>返回首页</button>
+        <p style={{ color: 'var(--text-secondary)' }}>未找到该历史记录</p>
+        <button className="btn-secondary" onClick={handleBack}>返回首页</button>
       </div>
     );
   }
@@ -179,10 +243,8 @@ ${pointsList || '（本次无打点记录）'}
           </span>
         </h3>
         <div className="hd-heatmap-container">
-          {/* 渐变背景条 */}
           <div className="hd-heatmap-bar">
             <div className="hd-heatmap-gradient" />
-            {/* 打点粒子 */}
             {excitementPoints.map((point, i) => {
               const pct = (point.elapsedMs / totalDurationMs) * 100;
               return (
@@ -198,7 +260,6 @@ ${pointsList || '（本次无打点记录）'}
               );
             })}
           </div>
-          {/* 时间刻度 */}
           <div className="hd-heatmap-ticks">
             <span>00:00</span>
             <span>{formatMs(totalDurationMs * 0.25)}</span>
@@ -206,7 +267,6 @@ ${pointsList || '（本次无打点记录）'}
             <span>{formatMs(totalDurationMs * 0.75)}</span>
             <span>{formatMs(totalDurationMs)}</span>
           </div>
-          {/* 悬浮气泡 */}
           {tooltip && (
             <div
               className="hd-tooltip"
@@ -221,6 +281,30 @@ ${pointsList || '（本次无打点记录）'}
             </div>
           )}
         </div>
+
+        {/* 连续愉悦度声呐图 */}
+        {curvePath && (
+          <svg className="pleasure-wave-svg" viewBox="0 0 100 60" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#4fc3f7" stopOpacity="0.3" />
+                <stop offset="50%" stopColor="#e040fb" stopOpacity="0.5" />
+                <stop offset="100%" stopColor="#ff1744" stopOpacity="0.3" />
+              </linearGradient>
+            </defs>
+            <path d={curvePath} fill="url(#waveGrad)" />
+            {excitementPoints.map((p, i) => (
+              <circle
+                key={i}
+                cx={(p.elapsedMs / totalDurationMs) * 100}
+                cy={60 - (p.bpm / 200) * 60}
+                r="1.5"
+                fill="#fff"
+                className="wave-anchor"
+              />
+            ))}
+          </svg>
+        )}
       </div>
 
       {/* 打点明细列表 */}
@@ -245,9 +329,12 @@ ${pointsList || '（本次无打点记录）'}
         </div>
       )}
 
-      {/* AI 迭代指令 */}
+      {/* AI 调理建议 */}
       <div className="hd-ai-section">
-        <h3 className="hd-section-title">🤖 AI 优化指令</h3>
+        <h3 className="hd-section-title">🧠 智能调理建议</h3>
+        <p className="hd-warm-advice">{warmAdvice}</p>
+
+        <h3 className="hd-section-title" style={{ marginTop: 16 }}>🤖 AI 优化指令</h3>
         <p className="hd-ai-desc">
           一键复制以下指令发送给 AI，获取基于本次体验数据定制的下一代编排方案。
         </p>
@@ -255,7 +342,7 @@ ${pointsList || '（本次无打点记录）'}
           <pre className="hd-ai-prompt-text">{aiPrompt}</pre>
         </div>
         <button
-          className={`btn hd-copy-btn ${copied ? 'copied' : ''}`}
+          className={`btn-primary hd-copy-btn ${copied ? 'copied' : ''}`}
           onClick={handleCopyPrompt}
         >
           {copied ? '✅ 已复制到剪贴板' : '📋 复制 AI 迭代指令'}
@@ -264,10 +351,10 @@ ${pointsList || '（本次无打点记录）'}
 
       {/* 底部操作 */}
       <div className="hd-actions">
-        <button className="btn btn-back" onClick={handleBack}>
+        <button className="btn-secondary btn-back" onClick={handleBack}>
           ◀ 返回首页
         </button>
-        <button className="btn btn-load" onClick={handleLoadSequence}>
+        <button className="btn-primary btn-load" onClick={handleLoadSequence}>
           🚀 加载此编排
         </button>
       </div>

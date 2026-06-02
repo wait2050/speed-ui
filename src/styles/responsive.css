@@ -1,20 +1,58 @@
 /* ============================================================
-   响应式
+   响应式适配
    ============================================================ */
 
-@media (min-width: 480px) {
+/* 手机竖屏 (默认) */
+.page {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: var(--space-lg) var(--space-md);
+}
+
+/* 平板 */
+@media (min-width: 768px) {
   .page {
-    max-width: 440px;
-    margin: 0 auto;
+    max-width: 600px;
+    padding: var(--space-xl) var(--space-lg);
   }
 
-  .player-action-name {
-    font-size: 32px;
+  .home-page {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-md);
+  }
+
+  .duration-card {
+    grid-column: 1 / -1;
+  }
+
+  .btn-compile {
+    grid-column: 1 / -1;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
-@media (min-height: 700px) {
-  .home-page {
-    justify-content: flex-start;
+/* 大屏 */
+@media (min-width: 1024px) {
+  .page {
+    max-width: 720px;
   }
+
+  .player-action-name {
+    font-size: 40px;
+  }
+
+  .sidebar-panel {
+    width: 360px;
+  }
+}
+
+/* iPhone SE 小屏 */
+@media (max-height: 600px) {
+  .duration-value { font-size: 48px; }
+  .timer { width: 150px; height: 150px; }
+  .app-title { margin-bottom: var(--space-md); font-size: 16px; }
 }

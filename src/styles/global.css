@@ -3,17 +3,94 @@
    ============================================================ */
 
 :root {
-  --bg-primary: #1a1a2e;
-  --bg-card: #16213e;
-  --bg-elevated: #1f2b47;
-  --text-primary: #e8e8f0;
-  --text-secondary: #8888aa;
-  --accent: #e94560;
-  --accent-dim: rgba(233, 69, 96, 0.15);
-  --border: #2a2a4a;
-  --border-active: #e94560;
-  --radius: 16px;
+  /* ---- 背景层次 ---- */
+  --bg-primary: #0a0a0f;
+  --bg-card: rgba(255, 255, 255, 0.03);
+  --bg-card-hover: rgba(255, 255, 255, 0.05);
+  --bg-elevated: rgba(255, 255, 255, 0.06);
+  --bg-overlay: rgba(0, 0, 0, 0.5);
+
+  /* ---- 强调色 ---- */
+  --accent-start: #7c3aed;
+  --accent-end: #ec4899;
+  --accent-gradient: linear-gradient(135deg, #7c3aed, #ec4899);
+  --accent: #a855f7;
+  --accent-dim: rgba(168, 85, 247, 0.15);
+
+  /* ---- 暖色强调（高潮/巅峰阶段） ---- */
+  --warm-start: #ff6b35;
+  --warm-end: #ffc107;
+  --warm-gradient: linear-gradient(135deg, #ff6b35, #ffc107);
+  --warm-dim: rgba(255, 107, 53, 0.15);
+
+  /* ---- 文字 ---- */
+  --text-primary: #f0f0f5;
+  --text-secondary: #6b7280;
+  --text-tertiary: rgba(255, 255, 255, 0.2);
+  --text-accent: var(--accent);
+
+  /* ---- 边框 ---- */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.15);
+  --border-active: var(--accent);
+
+  /* ---- 圆角 ---- */
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* ---- 安全区 ---- */
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* ---- 间距 ---- */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+
+  /* ---- 阴影 ---- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px rgba(168, 85, 247, 0.3);
+  --shadow-glow-warm: 0 0 20px rgba(255, 107, 53, 0.3);
+  --shadow-inset: inset 0 2px 5px rgba(0, 0, 0, 0.5);
+
+  /* ---- 动效曲线 ---- */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.6, 0.32, 1.6);
+
+  /* ---- 时长 ---- */
+  --duration-fast: 150ms;
+  --duration: 300ms;
+  --duration-slow: 500ms;
+  --duration-page: 300ms;
+
+  /* ---- 阶段专用色 ---- */
+  --phase-warmup: #4fc3f7;
+  --phase-core: #7c4dff;
+  --phase-sprint-start: #e040fb;
+  --phase-sprint-accel: #ff4081;
+  --phase-sprint-peak: #ff1744;
+  --phase-climax: #ff6e40;
+  --phase-afterglow: #ffab40;
+  --phase-cooldown: #69f0ae;
+  --phase-landing: #b0bec5;
+
+  /* ---- 字体 ---- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+    "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    sans-serif;
+  --font-mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
 }
 
 * {
@@ -26,9 +103,15 @@ html, body, #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-sans);
   background: var(--bg-primary);
+  background-image:
+    radial-gradient(ellipse 600px 400px at 20% 10%, rgba(124, 58, 237, 0.06), transparent),
+    radial-gradient(ellipse 500px 350px at 80% 80%, rgba(236, 72, 153, 0.04), transparent),
+    radial-gradient(ellipse 400px 300px at 50% 50%, rgba(79, 195, 247, 0.03), transparent);
   color: var(--text-primary);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
@@ -40,28 +123,28 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 24px 20px;
-  padding-bottom: calc(24px + var(--safe-bottom));
+  padding: var(--space-lg) var(--space-md);
+  padding-bottom: calc(var(--space-lg) + var(--safe-bottom));
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
 
 /* ---- Typography ---- */
 .app-title {
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 300;
-  letter-spacing: 4px;
+  letter-spacing: 2px;
   color: var(--text-secondary);
-  margin-bottom: 32px;
+  margin-bottom: var(--space-xl);
   text-align: center;
 }
 
 h2 {
-  font-size: 18px;
-  font-weight: 400;
+  font-size: 16px;
+  font-weight: 500;
   color: var(--text-secondary);
-  letter-spacing: 2px;
-  margin-bottom: 20px;
+  letter-spacing: 1.5px;
+  margin-bottom: var(--space-lg);
 }
 
 /* ---- Animations ---- */
@@ -80,4 +163,50 @@ h2 {
 @keyframes breathe {
   0%, 100% { transform: scale(1); opacity: 0.4; }
   50% { transform: scale(1.3); opacity: 0.8; }
+}
+
+/* ---- Page Transition Overlay ---- */
+.page-transition-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(0px);
+  opacity: 0;
+  transition: all 300ms var(--ease-out);
+}
+
+.page-transition-overlay.active {
+  opacity: 1;
+  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ---- Glass Card ---- */
+.glass-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  transition: all var(--duration) var(--ease-out);
+}
+
+.glass-card:hover {
+  background: var(--bg-card-hover);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  border-color: var(--border-hover);
+}
+
+/* ---- Stat Number (Gradient Text) ---- */
+.stat-number {
+  font-size: 24px;
+  font-weight: 300;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
