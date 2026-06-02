@@ -188,6 +188,17 @@ export class AudioEngine {
 
   private snapPreviewBuf: AudioBuffer | null = null;
 
+  /** 试听 BPM（播放 4 拍） */
+  async previewBpm(bpm: number, sound: SoundType): Promise<void> {
+    if (!this.ctx) return;
+    await this.resume();
+    const interval = 60 / bpm;
+    const now = this.ctx.currentTime + 0.05;
+    for (let i = 0; i < 4; i++) {
+      this.scheduleBeat(sound, now + i * interval, 0.6);
+    }
+  }
+
   /** 试听响指（加载真实 snap.mp3） */
   async previewSnap(volume = 0.8): Promise<void> {
     if (!this.ctx) return;

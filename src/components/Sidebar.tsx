@@ -250,7 +250,10 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
                 <div key={tier} style={{ marginBottom: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>{TIER_LABELS[tier]}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: 11, color: 'var(--accent)' }}>{prefs.customBpm[tier]} BPM</span>
+                    <button className="btn-chip" onClick={async () => { await audioEngine.init(); audioEngine.previewBpm(prefs.customBpm[tier], prefs.customSounds[tier]); }} style={{ fontSize: 10, padding: '2px 8px' }}>🔊</button>
+                  </div>
                   </div>
                   <input type="range" min={40} max={200} value={prefs.customBpm[tier]} onChange={e => handleBpmChange(tier, parseInt(e.target.value))} style={{ width: '100%' }} />
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>

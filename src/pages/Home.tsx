@@ -7,23 +7,7 @@ import { compileSequence } from '../compiler/compiler';
 import { loadPreferences, savePreferences } from '../storage';
 import { audioEngine } from '../audio/engine';
 import { Footer } from '../components/Footer';
-import type { SoundType, SpeedTier, PhaseOption } from '../types';
-
-const TIER_LABELS: Record<SpeedTier, string> = {
-  slow: '慢速',
-  medium: '中速',
-  fast: '快速',
-  extreme: '极速',
-};
-
-const SOUNDS: { id: SoundType; label: string }[] = [
-  { id: 'tick', label: '经典嗒音' },
-  { id: 'woodblock', label: '木鱼' },
-  { id: 'heartbeat', label: '心跳' },
-  { id: 'waterdrop', label: '水滴' },
-  { id: 'fingertap', label: '指尖敲击' },
-  { id: 'bassdrum', label: '低音鼓点' },
-];
+import type { PhaseOption } from '../types';
 
 // ---- SectionCard 组件（始终展开的平铺区块） ----
 const SectionCard: React.FC<{
@@ -100,25 +84,6 @@ export const Home: React.FC = () => {
     const newPrefs = { ...prefs, defaultDuration: val };
     setPrefs(newPrefs);
     savePreferences(newPrefs);
-  }, [prefs]);
-
-  const handleBpmChange = useCallback((tier: SpeedTier, val: number) => {
-    const newPrefs = {
-      ...prefs,
-      customBpm: { ...prefs.customBpm, [tier]: val },
-    };
-    setPrefs(newPrefs);
-    savePreferences(newPrefs);
-  }, [prefs]);
-
-  const handleSoundChange = useCallback((tier: SpeedTier | 'cooldown', sound: SoundType) => {
-    const newPrefs = {
-      ...prefs,
-      customSounds: { ...prefs.customSounds, [tier]: sound },
-    };
-    setPrefs(newPrefs);
-    savePreferences(newPrefs);
-    audioEngine.init().then(() => audioEngine.previewBeat(sound));
   }, [prefs]);
 
   const presets = [10, 15, 20, 25, 30, 40, 50, 60];
@@ -242,48 +207,6 @@ export const Home: React.FC = () => {
               {name}
             </button>
           ))}
-        </div>
-      </SectionCard>
-
-      {/* 高级设置 */}
-      <SectionCard title="高级设置">
-        {(Object.keys(prefs.customBpm) as SpeedTier[]).map(tier => (
-          <div key={tier} className="settings-row">
-            <span className="settings-label">{TIER_LABELS[tier]}</span>
-            <input
-              type="range"
-              min={40}
-              max={200}
-              value={prefs.customBpm[tier]}
-              onChange={e => handleBpmChange(tier, parseInt(e.target.value))}
-            />
-            <span className="settings-value">{prefs.customBpm[tier]} BPM</span>
-            <div className="sound-picker">
-              {SOUNDS.map(s => (
-                <button
-                  key={s.id}
-                  className={`btn-chip ${prefs.customSounds[tier] === s.id ? 'active' : ''}`}
-                  onClick={() => handleSoundChange(tier, s.id)}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-        <div className="settings-row">
-          <span className="settings-label">收尾</span>
-          <div className="sound-picker">
-            {SOUNDS.map(s => (
-              <button
-                key={s.id}
-                className={`btn-chip ${prefs.customSounds.cooldown === s.id ? 'active' : ''}`}
-                onClick={() => handleSoundChange('cooldown', s.id)}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
         </div>
       </SectionCard>
 
