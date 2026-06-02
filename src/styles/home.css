@@ -112,7 +112,43 @@
   justify-content: center;
 }
 
-/* ---- 手风琴卡片 (去边框：纯背景差) ---- */
+/* ---- 平铺区块卡片（始终展开，无折叠） ---- */
+.section-card {
+  width: 100%;
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: none;
+  border-radius: var(--radius-xl);
+  transition: all var(--duration) var(--ease-out);
+}
+
+.section-card:hover {
+  background: var(--bg-card-hover);
+}
+
+.section-card-header {
+  padding: var(--space-md) var(--space-lg);
+}
+
+.section-card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+}
+
+.section-card-body {
+  padding: 0 var(--space-lg) var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* ---- 手风琴卡片 (去边框：纯背景差) — 保留兼容 ---- */
 .accordion-card {
   width: 100%;
   background: var(--bg-card);

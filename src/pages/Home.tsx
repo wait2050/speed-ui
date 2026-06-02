@@ -25,30 +25,22 @@ const SOUNDS: { id: SoundType; label: string }[] = [
   { id: 'bassdrum', label: '低音鼓点' },
 ];
 
-// ---- AccordionCard 组件 ----
-const AccordionCard: React.FC<{
+// ---- SectionCard 组件（始终展开的平铺区块） ----
+const SectionCard: React.FC<{
   title: string;
   badge?: string;
-  defaultOpen?: boolean;
   children: React.ReactNode;
-}> = ({ title, badge, defaultOpen = false, children }) => {
-  const [open, setOpen] = useState(defaultOpen);
+}> = ({ title, badge, children }) => {
   return (
-    <div className={`accordion-card ${open ? 'open' : ''}`}>
-      <div className="accordion-header" onClick={() => setOpen(!open)}>
-        <div className="accordion-title">
+    <div className="section-card">
+      <div className="section-card-header">
+        <div className="section-card-title">
           <span>{title}</span>
           {badge && <span className="accordion-badge">{badge}</span>}
         </div>
-        <span className="accordion-chevron">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5"
-              strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </span>
       </div>
-      <div className="accordion-body">
-        <div className="accordion-content">{children}</div>
+      <div className="section-card-body">
+        {children}
       </div>
     </div>
   );
@@ -167,8 +159,8 @@ export const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* 手风琴卡片 1：阶段配置 */}
-      <AccordionCard title="阶段配置" defaultOpen>
+      {/* 阶段配置 */}
+      <SectionCard title="阶段配置">
         <div className="phase-toggles-row">
           {([
             ['warmup', '热身'],
@@ -212,10 +204,10 @@ export const Home: React.FC = () => {
           ))}
         </div>
 
-      </AccordionCard>
+      </SectionCard>
 
-      {/* 手风琴卡片 2：响指次数 */}
-      <AccordionCard title="响指次数" badge={`${Object.values(snapCounts).reduce((a, b) => a + b, 0)} 次`} defaultOpen>
+      {/* 响指次数 */}
+      <SectionCard title="响指次数" badge={`${Object.values(snapCounts).reduce((a, b) => a + b, 0)} 次`}>
         <p className="accordion-sub-label">每个阶段随机插入 0-4 次响指（热身阶段除外）</p>
         <div className="phase-toggles-row snap-toggles">
           {([
@@ -236,10 +228,10 @@ export const Home: React.FC = () => {
             </span>
           ))}
         </div>
-      </AccordionCard>
+      </SectionCard>
 
-      {/* 手风琴卡片 3：动作选择 */}
-      <AccordionCard title="可选动作" badge={`${enabledActions.size}/7`} defaultOpen>
+      {/* 动作选择 */}
+      <SectionCard title="可选动作" badge={`${enabledActions.size}/7`}>
         <div className="phase-toggles-row">
           {ALL_ACTION_NAMES.map(name => (
             <button
@@ -251,10 +243,10 @@ export const Home: React.FC = () => {
             </button>
           ))}
         </div>
-      </AccordionCard>
+      </SectionCard>
 
-      {/* 手风琴卡片 4：高级设置 */}
-      <AccordionCard title="高级设置" defaultOpen>
+      {/* 高级设置 */}
+      <SectionCard title="高级设置">
         {(Object.keys(prefs.customBpm) as SpeedTier[]).map(tier => (
           <div key={tier} className="settings-row">
             <span className="settings-label">{TIER_LABELS[tier]}</span>
@@ -293,7 +285,7 @@ export const Home: React.FC = () => {
             ))}
           </div>
         </div>
-      </AccordionCard>
+      </SectionCard>
 
       {/* CTA 按钮 — 自然流，非固定定位 */}
       <button className="btn-primary btn-compile-inline" onClick={handleCompile}>
