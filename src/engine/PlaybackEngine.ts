@@ -64,9 +64,15 @@ export class PlaybackEngine {
   private elapsedBeforePause = 0;
   private timerId: ReturnType<typeof setInterval> | null = null;
   private scheduledBeats = new Set<number>();
-  private scheduledSnaps = new Set<number>(); // key = snap 绝对时间戳（毫秒整数）去重
   private lastVoiceKey = '';
   private voiceEndTime = 0;
+
+  // ---- 响指独立音轨（预渲染一条 AudioBuffer，整条播放，不依赖 JS 轮询）----
+  private snapTrackSource: AudioBufferSourceNode | null = null;
+  private snapTrackBuffer: AudioBuffer | null = null;
+  private snapTrackGain: GainNode | null = null;
+  private snapTrackStartCtxTime = 0; // 音轨 source.start() 时的 ctx.currentTime
+  private snapTrackOffsetSec = 0;    // 音轨在 buffer 内的起始偏移（秒）
 
   private currentActionName = '';
   private currentPhase: Phase = 'warmup';
@@ -128,6 +134,96 @@ export class PlaybackEngine {
     }
   }
 
+  // ---- 响指独立音轨：预渲染 + 单条 BufferSource 播放 ----
+
+  /**
+   * 把整条 timeline 长度渲染成一条 AudioBuffer：
+   * 在每个 snap 触发时刻将 snap.mp3 的 PCM 样本叠加写入。
+   * 播放时只需一条 BufferSource 即可，时序由 AudioContext 高精度时钟驱动。
+   */
+  private buildSnapTrack(timeline: TimelineItem[]): AudioBuffer | null {
+    if (!this.ctx || !this.snapBuffer) return null;
+    const sr = this.ctx.sampleRate;
+    let totalMs = 0;
+    for (const item of timeline) {
+      if (item.type === 'action' || item.type === 'rest') totalMs += item.duration;
+    }
+    // 加 2s 尾巴防止 snap 末尾被裁
+    const totalSamples = Math.ceil((totalMs + 2000) * sr / 1000);
+    const buffer = this.ctx.createBuffer(1, totalSamples, sr);
+    const data = buffer.getChannelData(0);
+
+    let accMs = 0;
+    const snapData = this.snapBuffer.getChannelData(0);
+    const snapLen = snapData.length;
+    for (const item of timeline) {
+      if (item.type === 'snap') {
+        const startSample = Math.floor((accMs * sr) / 1000);
+        const endSample = Math.min(startSample + snapLen, data.length);
+        // 简单叠加（不归一化，因为 snap 间隔通常足够远）
+        for (let i = 0; i < endSample - startSample; i++) {
+          data[startSample + i] = snapData[i];
+        }
+      }
+      if (item.type === 'action' || item.type === 'rest') {
+        accMs += item.duration;
+      }
+    }
+    return buffer;
+  }
+
+  /** 启动响指音轨（从 snapTrackOffsetSec 处开始） */
+  private startSnapTrack(): void {
+    if (!this.ctx || !this.snapTrackBuffer) return;
+    // 若已存在先停掉
+    this.stopSnapTrack();
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.snapTrackBuffer;
+    const gain = this.ctx.createGain();
+    gain.gain.value = this.snapVolume;
+    src.connect(gain).connect(this.ctx.destination);
+    this.snapTrackSource = src;
+    this.snapTrackGain = gain;
+    this.snapTrackStartCtxTime = this.ctx.currentTime;
+    // clamp 偏移到 buffer 范围内
+    const offset = Math.max(0, Math.min(this.snapTrackBuffer.duration, this.snapTrackOffsetSec));
+    src.start(this.ctx.currentTime, offset);
+  }
+
+  /** 停止响指音轨，并把当前播放位置记到 snapTrackOffsetSec 供下次启动使用 */
+  private stopSnapTrack(): void {
+    if (!this.ctx) {
+      this.snapTrackSource = null;
+      this.snapTrackGain = null;
+      return;
+    }
+    if (this.snapTrackSource) {
+      // 记录当前播放位置（秒）作为下次启动的偏移
+      const elapsed = this.ctx.currentTime - this.snapTrackStartCtxTime;
+      this.snapTrackOffsetSec = Math.max(0, this.snapTrackOffsetSec + elapsed);
+      try { this.snapTrackSource.stop(); } catch {}
+      try { this.snapTrackSource.disconnect(); } catch {}
+      this.snapTrackSource = null;
+    }
+    if (this.snapTrackGain) {
+      try { this.snapTrackGain.disconnect(); } catch {}
+      this.snapTrackGain = null;
+    }
+  }
+
+  /** 当 timeline 整体替换时（主观高潮 / 余韵），重建响指音轨并保持当前播放位置 */
+  private rebuildSnapTrack(): void {
+    if (!this.ctx) return;
+    // 先记录当前播放偏移
+    if (this.snapTrackSource) {
+      const elapsed = this.ctx.currentTime - this.snapTrackStartCtxTime;
+      this.snapTrackOffsetSec = Math.max(0, this.snapTrackOffsetSec + elapsed);
+    }
+    this.stopSnapTrack();
+    this.snapTrackBuffer = this.buildSnapTrack(this.timeline);
+    if (this.snapTrackBuffer) this.startSnapTrack();
+  }
+
   /** 注册 UI 更新回调 */
   setOnUpdate(cb: EngineUpdateCallback): void {
     this.onUpdate = cb;
@@ -156,11 +252,15 @@ export class PlaybackEngine {
     this.pausedAt = null;
     this.elapsedBeforePause = 0;
     this.scheduledBeats.clear();
-    this.scheduledSnaps.clear();
     this.excitementPoints = [];
     this.lastVoiceKey = '';
     this.voiceEndTime = 0;
     this.startTime = this.ctx.currentTime;
+
+    // 启动响指独立音轨（从 0 偏移开始）
+    this.snapTrackBuffer = this.buildSnapTrack(timeline);
+    this.snapTrackOffsetSec = 0;
+    this.startSnapTrack();
 
     this.scheduleLoop();
     this.timerId = setInterval(() => this.scheduleLoop(), SCHEDULE_INTERVAL_MS);
@@ -174,6 +274,8 @@ export class PlaybackEngine {
     this.pausedAt = this.ctx.currentTime;
     this.elapsedBeforePause = this.pausedAt - this.startTime;
     if (this.timerId) { clearInterval(this.timerId); this.timerId = null; }
+    // 暂停响指音轨（记录当前位置）
+    this.stopSnapTrack();
     this.emitUpdate();
   }
 
@@ -182,6 +284,8 @@ export class PlaybackEngine {
     this.isPaused = false;
     this.startTime = this.ctx.currentTime - this.elapsedBeforePause;
     this.pausedAt = null;
+    // 恢复响指音轨（从记录的偏移继续）
+    this.startSnapTrack();
     this.scheduleLoop();
     this.timerId = setInterval(() => this.scheduleLoop(), SCHEDULE_INTERVAL_MS);
     this.emitUpdate();
@@ -192,7 +296,6 @@ export class PlaybackEngine {
     const wasPaused = this.isPaused;
     if (this.timerId) { clearInterval(this.timerId); this.timerId = null; }
     this.scheduledBeats.clear();
-    this.scheduledSnaps.clear();
     this.lastVoiceKey = '';
     this.voiceEndTime = 0;
     this.startTime = this.ctx.currentTime - targetMs / 1000;
@@ -200,6 +303,10 @@ export class PlaybackEngine {
     this.pausedAt = null;
     this.isPaused = false;
     this.isRunning = true;
+    // 重置响指音轨到目标位置
+    this.stopSnapTrack();
+    this.snapTrackOffsetSec = Math.max(0, targetMs / 1000);
+    this.startSnapTrack();
     this.scheduleLoop();
     this.timerId = setInterval(() => this.scheduleLoop(), SCHEDULE_INTERVAL_MS);
     if (wasPaused) {
@@ -212,6 +319,7 @@ export class PlaybackEngine {
     this.isPaused = false;
     if (this.timerId) { clearInterval(this.timerId); this.timerId = null; }
     this.scheduledBeats.clear();
+    this.stopSnapTrack();
   }
 
   destroy(): void {
@@ -221,6 +329,7 @@ export class PlaybackEngine {
     this.beatBuffers.clear();
     this.signalBuffers.clear();
     this.voiceBuffers.clear();
+    this.snapTrackBuffer = null;
     this.initialized = false;
   }
 
@@ -305,35 +414,6 @@ export class PlaybackEngine {
 
       if (item.type === 'action' || item.type === 'rest') {
         accumulatedMs += item.duration;
-      }
-
-      // 打响指：预调度式（与节拍音共用同一套 look-ahead 机制）
-      // accumulatedMs 已更新，snap 的触发时间 = 前面所有 action/rest 的累积终点
-      if (item.type === 'snap') {
-        if (!this.snapBuffer) {
-          if (this.scheduledSnaps.size === 0) console.warn('[SnapDiag] snapBuffer 为空，跳过');
-        } else {
-          const snapAbsTime = this.startTime + accumulatedMs / 1000;
-          const key = Math.round(snapAbsTime * 1000);
-          const inWindow = snapAbsTime > now && snapAbsTime < now + LOOK_AHEAD_MS / 1000;
-          const alreadyScheduled = this.scheduledSnaps.has(key);
-          const missed = snapAbsTime <= now; // 触发时刻已过，兜底立即播
-          if (this.scheduledSnaps.size < 5) {
-            console.log(`[SnapDiag] ti=${ti} now=${now.toFixed(3)} snapAbsTime=${snapAbsTime.toFixed(3)} deltaMs=${Math.round((snapAbsTime - now) * 1000)} elapsedMs=${Math.round(elapsedMs)} inWindow=${inWindow} missed=${missed} alreadyScheduled=${alreadyScheduled}`);
-          }
-          if ((inWindow || missed) && !alreadyScheduled) {
-            this.scheduledSnaps.add(key);
-            const src = this.ctx.createBufferSource();
-            src.buffer = this.snapBuffer;
-            const gain = this.ctx.createGain();
-            gain.gain.value = this.snapVolume;
-            src.connect(gain);
-            gain.connect(this.ctx.destination);
-            // 错过则立即播；否则按精确时间点预调度
-            src.start(missed ? this.ctx.currentTime + 0.005 : snapAbsTime);
-            console.log(`[SnapDiag] 已${missed ? '兜底' : '调度'} ti=${ti} startTime=${(missed ? this.ctx.currentTime + 0.005 : snapAbsTime).toFixed(3)} bufferDur=${this.snapBuffer.duration.toFixed(2)}s volume=${this.snapVolume}`);
-          }
-        }
       }
     }
   }
@@ -513,6 +593,9 @@ export class PlaybackEngine {
   /** 设置响指音量 (0.0–1.0) */
   setSnapVolume(v: number): void {
     this.snapVolume = Math.max(0, Math.min(1, v));
+    if (this.snapTrackGain) {
+      this.snapTrackGain.gain.value = this.snapVolume;
+    }
   }
 
   /** 播放打响指 */
@@ -622,6 +705,9 @@ export class PlaybackEngine {
     newTimeline.push({ type: 'end' });
     this.timeline = newTimeline;
 
+    // 重建响指音轨以匹配新 timeline，并保持当前播放位置
+    this.rebuildSnapTrack();
+
     // 震动保护
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate([100, 50, 100]);
@@ -697,6 +783,9 @@ export class PlaybackEngine {
 
     newTimeline.push({ type: 'end' });
     this.timeline = newTimeline;
+
+    // 重建响指音轨以匹配新 timeline，并保持当前播放位置
+    this.rebuildSnapTrack();
 
     // 震动保护
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
