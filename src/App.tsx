@@ -9,13 +9,11 @@ import { Player } from './pages/Player';
 import { Landing } from './pages/Landing';
 import { HistoryDetail } from './pages/HistoryDetail';
 import { Sidebar } from './components/Sidebar';
-import { loadProgress } from './storage';
-import { audioEngine } from './audio/engine';
 import type { CompiledSequence } from './types';
 import './index.css';
 
 const AppInner: React.FC = () => {
-  const { status, compiled, compilationDone, startPlaying } = useAppStore();
+  const { status, compilationDone } = useAppStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // 页面转场遮罩
@@ -30,25 +28,6 @@ const AppInner: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [status]);
-
-  // 检测未完成编排
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        const saved = loadProgress();
-        if (saved && status === 'IDLE') {
-          const resume = window.confirm('检测到上次未完成的播放，是否继续？');
-          if (resume) {
-            audioEngine.init().then(() => {
-              compilationDone({ timeline: saved.timeline, stats: { totalDuration: 0, totalActionDuration: 0, totalRestDuration: 0, rounds: 0, warmupRounds: 0, coreRounds: 0, sprintRounds: 0 } });
-              startPlaying();
-            }).catch(() => {});
-          }
-        }
-      } catch { /* ignore */ }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, []); // eslint-disable-line
 
   // 从侧边栏加载编排
   const handleLoadSequence = useCallback((seq: CompiledSequence) => {

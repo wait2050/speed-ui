@@ -2,12 +2,19 @@
 // Sidebar — 侧边栏组件（历史/收藏/自助编排入口）
 // ============================================================
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { loadHistory, loadFavorites, removeFavorite } from '../storage';
+import { loadHistory, loadFavorites, removeFavorite, loadPreferences, savePreferences } from '../storage';
 import { formatSec } from '../utils/time';
 import { readImportFile } from '../storage/export';
 import { useAppStore } from '../state/store';
 import { audioEngine } from '../audio/engine';
-import type { HistoryEntry, Favorite, CompiledSequence } from '../types';
+import type { HistoryEntry, Favorite, CompiledSequence, SoundType, SpeedTier } from '../types';
+
+const TIER_LABELS: Record<SpeedTier, string> = { slow: '慢速', medium: '中速', fast: '快速', extreme: '极速' };
+const SOUNDS: { id: SoundType; label: string }[] = [
+  { id: 'tick', label: '经典嗒音' }, { id: 'woodblock', label: '木鱼' },
+  { id: 'heartbeat', label: '心跳' }, { id: 'waterdrop', label: '水滴' },
+  { id: 'fingertap', label: '指尖敲击' }, { id: 'bassdrum', label: '低音鼓点' },
+];
 
 interface Props {
   isOpen: boolean;
@@ -22,10 +29,24 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
+  const [prefs, setPrefs] = useState(() => loadPreferences());
   const snapVol = useAppStore((s) => s.snapVolume);
   const setSnapVol = useAppStore((s) => s.setSnapVolume);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const showHistoryDetail = useAppStore((s) => s.showHistoryDetail);
+
+  const handleBpmChange = useCallback((tier: SpeedTier, val: number) => {
+    const newPrefs = { ...prefs, customBpm: { ...prefs.customBpm, [tier]: val } };
+    setPrefs(newPrefs);
+    savePreferences(newPrefs);
+  }, [prefs]);
+
+  const handleSoundChange = useCallback((tier: SpeedTier | 'cooldown', sound: SoundType) => {
+    const newPrefs = { ...prefs, customSounds: { ...prefs.customSounds, [tier]: sound } };
+    setPrefs(newPrefs);
+    savePreferences(newPrefs);
+    audioEngine.init().then(() => audioEngine.previewBeat(sound));
+  }, [prefs]);
 
   useEffect(() => {
     if (isOpen) {
@@ -212,29 +233,46 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
         {/* 设置 */}
         {tab === 'settings' && (
           <div className="sidebar-stats">
-            <div className="stat-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                <span>👆 响指音量</span>
-                <button
-                  className="btn-chip"
-                  onClick={async () => {
-                    await audioEngine.init();
-                    audioEngine.previewSnap(snapVol / 100);
-                  }}
-                  style={{ fontSize: 11, padding: '4px 10px' }}
-                >
-                  🔊 试听
-                </button>
+            {/* 响指音量 */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>👆 响指音量</span>
+                <button className="btn-chip" onClick={async () => { await audioEngine.init(); audioEngine.previewSnap(snapVol / 100); }} style={{ fontSize: 11, padding: '4px 10px' }}>🔊 试听</button>
               </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={snapVol}
-                onChange={e => setSnapVol(parseInt(e.target.value))}
-                style={{ width: '100%' }}
-              />
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{snapVol}%</span>
+              <input type="range" min={0} max={100} value={snapVol} onChange={e => setSnapVol(parseInt(e.target.value))} style={{ width: '100%' }} />
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{snapVol}%</span>
+            </div>
+
+            {/* 速度 / 音色 */}
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 16 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginBottom: 12 }}>🎵 速度 / 音色</span>
+              {(Object.keys(prefs.customBpm) as SpeedTier[]).map(tier => (
+                <div key={tier} style={{ marginBottom: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>{TIER_LABELS[tier]}</span>
+                    <span style={{ fontSize: 11, color: 'var(--accent)' }}>{prefs.customBpm[tier]} BPM</span>
+                  </div>
+                  <input type="range" min={40} max={200} value={prefs.customBpm[tier]} onChange={e => handleBpmChange(tier, parseInt(e.target.value))} style={{ width: '100%' }} />
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                    {SOUNDS.map(s => (
+                      <button key={s.id} className={`btn-chip ${prefs.customSounds[tier] === s.id ? 'active' : ''}`} onClick={() => handleSoundChange(tier, s.id)} style={{ fontSize: 10, padding: '3px 8px' }}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {/* 收尾音色 */}
+              <div style={{ marginBottom: 14 }}>
+                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>收尾</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {SOUNDS.map(s => (
+                    <button key={s.id} className={`btn-chip ${prefs.customSounds.cooldown === s.id ? 'active' : ''}`} onClick={() => handleSoundChange('cooldown', s.id)} style={{ fontSize: 10, padding: '3px 8px' }}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
