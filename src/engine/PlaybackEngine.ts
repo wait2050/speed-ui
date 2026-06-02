@@ -498,18 +498,16 @@ export class PlaybackEngine {
 
   /** 播放打响指 */
   playSnap(): void {
-    if (!this.ctx) { console.log('[Engine] playSnap: ctx 为空'); return; }
-    if (!this.snapBuffer) { console.log('[Engine] playSnap: snapBuffer 为空'); return; }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => {});
-    }
+    if (!this.ctx || !this.snapBuffer) return;
+    // 强制恢复 AudioContext（iOS 可能在不交互时挂起）
+    this.ctx.resume().catch(() => {});
     const src = this.ctx.createBufferSource();
     src.buffer = this.snapBuffer;
     const gain = this.ctx.createGain();
     gain.gain.value = this.snapVolume;
     src.connect(gain);
     gain.connect(this.ctx.destination);
-    src.start(this.ctx.currentTime + 0.005);
+    src.start(0);
   }
 
   /** 播放主观打点风铃音 */
