@@ -313,65 +313,26 @@
 }
 
 .gesture-floating-icon {
-  font-size: 32px;
-}
-
-.gesture-floating-value {
-  font-size: 36px;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-size: 40px;
   line-height: 1;
 }
 
 .gesture-floating-label {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
   letter-spacing: 2px;
 }
 
-/* ---- 快速读数条 ---- */
-.quick-readout {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  max-width: 320px;
+/* 触发态弹出动画 */
+.gesture-floating-indicator.triggered {
+  animation: gesturePopIn 0.3s var(--ease-spring);
 }
 
-.quick-readout-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  opacity: 0.6;
-}
-
-.quick-readout-bar {
-  flex: 1;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.quick-readout-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 2px;
-  transition: width 0.15s ease-out;
-}
-
-.quick-readout-fill.intensity {
-  background: var(--warm-start);
-}
-
-.quick-readout-val {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  min-width: 24px;
-  text-align: right;
+@keyframes gesturePopIn {
+  0% { opacity: 0; transform: translateY(-50%) scale(0.5); }
+  60% { transform: translateY(-50%) scale(1.15); }
+  100% { opacity: 1; transform: translateY(-50%) scale(1); }
 }
 
 /* ---- 停止按钮 ---- */

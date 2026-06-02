@@ -33,7 +33,7 @@ function triggerHaptic(pattern: number | number[]) {
 // ============================================================
 // Onboarding 首次引导检测
 // ============================================================
-const ONBOARDING_KEY = 'rhythm_player_onboarded_v3';
+const ONBOARDING_KEY = 'rhythm_player_onboarded_v4';
 function hasCompletedOnboarding(): boolean {
   try { return localStorage.getItem(ONBOARDING_KEY) === '1'; } catch { return false; }
 }
@@ -67,19 +67,16 @@ export const Player: React.FC = () => {
   const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [controlsOpacity, setControlsOpacity] = useState(0.5);
 
-  // ---- 分屏手势 ----
-  const [volume, setVolume] = useState(50);
-  const [intensity, setIntensity] = useState(50);
+  // ---- 分屏手势：左=兴奋打点，右=高潮/余韵 ----
   const [gestureIndicator, setGestureIndicator] = useState<{
     zone: 'left' | 'right';
-    value: number;
-    label: string;
     icon: string;
+    label: string;
+    triggered: boolean;
   } | null>(null);
   const gestureStartY = useRef(0);
-  const gestureStartValue = useRef(0);
   const gestureActiveZone = useRef<'left' | 'right' | null>(null);
-  const lastVolumeIntHaptic = useRef<{ vol: number; int: number }>({ vol: 50, int: 50 });
+  const gestureTriggered = useRef(false); // 每次手势只触发一次
 
   // ---- 双击检测 ----
   const lastTapTime = useRef(0);
@@ -226,64 +223,59 @@ export const Player: React.FC = () => {
   }, [ds.actionName, addExcitementPoint, addRipple]);
 
   // ============================================================
-  // 分屏手势系统
+  // 分屏手势：左=兴奋打点，右=高潮/余韵（滑动≥30px触发）
   // ============================================================
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0];
     const screenWidth = window.innerWidth;
-    const zone = touch.clientX < screenWidth / 2 ? 'left' : 'right';
-    gestureActiveZone.current = zone;
+    gestureActiveZone.current = touch.clientX < screenWidth / 2 ? 'left' : 'right';
     gestureStartY.current = touch.clientY;
-    gestureStartValue.current = zone === 'left' ? volume : intensity;
-  }, [volume, intensity]);
+    gestureTriggered.current = false;
+  }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!gestureActiveZone.current) return;
+    const zone = gestureActiveZone.current;
+    if (!zone || gestureTriggered.current) return;
     const touch = e.touches[0];
-    const deltaY = gestureStartY.current - touch.clientY; // 上滑为正
-    const sensitivity = 2; // px per unit
-    const rawValue = gestureStartValue.current + deltaY / sensitivity;
-    const clampedValue = Math.max(0, Math.min(100, Math.round(rawValue)));
+    const deltaY = Math.abs(touch.clientY - gestureStartY.current);
+    if (deltaY < 30) return; // 阈值：滑动超过 30px 才触发
 
-    if (gestureActiveZone.current === 'left') {
-      setVolume(clampedValue);
-      // 音量跨越整数区间触觉反馈
-      if (clampedValue !== lastVolumeIntHaptic.current.vol) {
-        triggerHaptic(15);
-        lastVolumeIntHaptic.current = { ...lastVolumeIntHaptic.current, vol: clampedValue };
-      }
-      // 极值强震
-      if (clampedValue === 0 || clampedValue === 100) {
-        if (lastVolumeIntHaptic.current.vol !== clampedValue) {
-          triggerHaptic(60);
-        }
-      }
-      setGestureIndicator({ zone: 'left', value: clampedValue, label: '音量', icon: '🔊' });
+    gestureTriggered.current = true;
+
+    if (zone === 'left') {
+      // 左侧滑动 → 记录兴奋点
+      recordExcitement();
+      triggerHaptic([20, 10, 20]);
+      setGestureIndicator({ zone: 'left', icon: '⚡', label: '兴奋打点', triggered: true });
     } else {
-      setIntensity(clampedValue);
-      if (clampedValue !== lastVolumeIntHaptic.current.int) {
-        triggerHaptic(15);
-        lastVolumeIntHaptic.current = { ...lastVolumeIntHaptic.current, int: clampedValue };
+      // 右侧滑动 → 高潮/余韵
+      if (ds.phase !== 'climax') {
+        engineRef.current?.triggerSubjectiveClimax('捏住并旋转');
+        setSubjectiveClimax(true);
+        triggerHaptic([50, 30, 50, 30, 100]);
+        setGestureIndicator({ zone: 'right', icon: '🔥', label: '冲刺', triggered: true });
+      } else {
+        engineRef.current?.triggerReleaseAfterglow('提拉然后松手');
+        setSubjectiveClimax(false);
+        triggerHaptic([30, 50, 30]);
+        setGestureIndicator({ zone: 'right', icon: '✨', label: '余韵', triggered: true });
       }
-      if (clampedValue === 0 || clampedValue === 100) {
-        if (lastVolumeIntHaptic.current.int !== clampedValue) {
-          triggerHaptic(60);
-        }
-      }
-      setGestureIndicator({ zone: 'right', value: clampedValue, label: '强度', icon: '📳' });
     }
 
     resetWakeTimer();
-  }, [resetWakeTimer]);
+  }, [ds.phase, recordExcitement, setSubjectiveClimax, resetWakeTimer]);
 
   // ---- 手势检测标记（防止滑动误触发单击） ----
   const gestureHappened = useRef(false);
 
   const handleTouchEnd = useCallback(() => {
+    if (gestureActiveZone.current && gestureTriggered.current) {
+      gestureHappened.current = true;
+    }
     gestureActiveZone.current = null;
-    gestureHappened.current = true;
+    gestureTriggered.current = false;
     // 延迟清除指示器
-    setTimeout(() => setGestureIndicator(null), 600);
+    setTimeout(() => setGestureIndicator(null), 800);
   }, []);
 
   // ---- 单击唤醒 / 双击暂停 ----
@@ -319,24 +311,30 @@ export const Player: React.FC = () => {
       if (e.key === ' ') {
         e.preventDefault();
         togglePause();
-      } else if (e.key === 'ArrowUp') {
-        setVolume(v => Math.min(100, v + 5));
-        triggerHaptic(15);
-      } else if (e.key === 'ArrowDown') {
-        setVolume(v => Math.max(0, v - 5));
-        triggerHaptic(15);
-      } else if (e.key === 'ArrowRight') {
-        setIntensity(v => Math.min(100, v + 5));
-        triggerHaptic(15);
       } else if (e.key === 'ArrowLeft') {
-        setIntensity(v => Math.max(0, v - 5));
-        triggerHaptic(15);
+        recordExcitement();
+        triggerHaptic([20, 10, 20]);
+        setGestureIndicator({ zone: 'left', icon: '⚡', label: '兴奋打点', triggered: true });
+        setTimeout(() => setGestureIndicator(null), 800);
+      } else if (e.key === 'ArrowRight') {
+        if (ds.phase !== 'climax') {
+          engineRef.current?.triggerSubjectiveClimax('捏住并旋转');
+          setSubjectiveClimax(true);
+          triggerHaptic([50, 30, 50, 30, 100]);
+          setGestureIndicator({ zone: 'right', icon: '🔥', label: '冲刺', triggered: true });
+        } else {
+          engineRef.current?.triggerReleaseAfterglow('提拉然后松手');
+          setSubjectiveClimax(false);
+          triggerHaptic([30, 50, 30]);
+          setGestureIndicator({ zone: 'right', icon: '✨', label: '余韵', triggered: true });
+        }
+        setTimeout(() => setGestureIndicator(null), 800);
       }
       wakeUp();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePause, wakeUp]);
+  }, [ds.phase, recordExcitement, setSubjectiveClimax, togglePause, wakeUp]);
 
   const segments: PhaseSegment[] = useMemo(
     () => compiled ? computePhaseSegments(compiled.timeline) : [],
@@ -370,9 +368,8 @@ export const Player: React.FC = () => {
 
       {/* 分屏手势指示器 */}
       {gestureIndicator && (
-        <div className={`gesture-floating-indicator ${gestureIndicator.zone}`}>
+        <div className={`gesture-floating-indicator ${gestureIndicator.zone} ${gestureIndicator.triggered ? 'triggered' : ''}`}>
           <span className="gesture-floating-icon">{gestureIndicator.icon}</span>
-          <span className="gesture-floating-value">{gestureIndicator.value}</span>
           <span className="gesture-floating-label">{gestureIndicator.label}</span>
         </div>
       )}
@@ -389,24 +386,6 @@ export const Player: React.FC = () => {
         <div className="player-phase">{PHASE_LABELS[ds.phase] ?? ds.phase}</div>
         <div className="player-action-name">{ds.actionName}</div>
         <Timer remainingMs={ds.actionRemainingMs} totalMs={ds.actionRemainingMs || 60000} beatPulse={beatPulse} />
-
-        {/* 音量/强度快速读数条 */}
-        <div className="quick-readout">
-          <div className="quick-readout-item">
-            <span>🔊</span>
-            <div className="quick-readout-bar">
-              <div className="quick-readout-fill" style={{ width: `${volume}%` }} />
-            </div>
-            <span className="quick-readout-val">{volume}</span>
-          </div>
-          <div className="quick-readout-item">
-            <span>📳</span>
-            <div className="quick-readout-bar">
-              <div className="quick-readout-fill intensity" style={{ width: `${intensity}%` }} />
-            </div>
-            <span className="quick-readout-val">{intensity}</span>
-          </div>
-        </div>
 
         <button className="btn-secondary btn-icon btn-stop-inline" onClick={handleStop}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -425,7 +404,7 @@ export const Player: React.FC = () => {
                 <div className="onboarding-gesture-icon">👆</div>
                 <div className="onboarding-gesture-desc">
                   <strong>左侧滑动</strong>
-                  <span>音量 🔊</span>
+                  <span>兴奋打点 ⚡</span>
                 </div>
                 <div className="onboarding-arrow up-down">
                   <svg width="24" height="48" viewBox="0 0 24 48">
@@ -439,7 +418,7 @@ export const Player: React.FC = () => {
                 <div className="onboarding-gesture-icon">👆</div>
                 <div className="onboarding-gesture-desc">
                   <strong>右侧滑动</strong>
-                  <span>强度 📳</span>
+                  <span>冲刺 / 余韵 🔥</span>
                 </div>
                 <div className="onboarding-arrow up-down">
                   <svg width="24" height="48" viewBox="0 0 24 48">
