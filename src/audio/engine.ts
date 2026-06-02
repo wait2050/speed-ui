@@ -186,6 +186,29 @@ export class AudioEngine {
     this.initialized = false;
   }
 
+  /** 试听响指（合成短噪声） */
+  previewSnap(volume = 0.8): void {
+    if (!this.ctx) return;
+    this.resume().catch(() => {});
+    const sr = 44100;
+    const len = Math.ceil(0.05 * sr);
+    const buf = new AudioBuffer({ length: len, sampleRate: sr });
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      const t = i / sr;
+      const attack = Math.min(1, t / 0.001);
+      const decay = Math.exp(-t / 0.008);
+      ch[i] = (Math.random() * 2 - 1) * 0.9 * attack * decay;
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const gain = this.ctx.createGain();
+    gain.gain.value = volume;
+    src.connect(gain);
+    gain.connect(this.ctx.destination);
+    src.start(this.ctx.currentTime + 0.005);
+  }
+
   /** 播放空灵风铃音效（FM 调频合成） */
   async playChimeSound(): Promise<void> {
     if (!this.ctx) return;

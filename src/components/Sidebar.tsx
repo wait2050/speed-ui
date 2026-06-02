@@ -6,6 +6,7 @@ import { loadHistory, loadFavorites, removeFavorite } from '../storage';
 import { formatSec } from '../utils/time';
 import { readImportFile } from '../storage/export';
 import { useAppStore } from '../state/store';
+import { audioEngine } from '../audio/engine';
 import type { HistoryEntry, Favorite, CompiledSequence } from '../types';
 
 interface Props {
@@ -212,7 +213,19 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
         {tab === 'settings' && (
           <div className="sidebar-stats">
             <div className="stat-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
-              <span>👆 响指音量</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                <span>👆 响指音量</span>
+                <button
+                  className="btn-chip"
+                  onClick={async () => {
+                    await audioEngine.init();
+                    audioEngine.previewSnap(snapVol / 100);
+                  }}
+                  style={{ fontSize: 11, padding: '4px 10px' }}
+                >
+                  🔊 试听
+                </button>
+              </div>
               <input
                 type="range"
                 min={0}
