@@ -472,18 +472,15 @@ export class PlaybackEngine {
     return buf;
   }
 
-  /** 合成打响指：极短高频噪声 + 带通滤波 */
+  /** 合成响指回退（仅当 snap.mp3 加载失败时使用） */
   private makeSnap(): AudioBuffer {
     const sr = 44100;
-    const len = Math.ceil(0.04 * sr); // 40ms
+    const len = Math.ceil(0.06 * sr);
     const buf = new AudioBuffer({ length: len, sampleRate: sr });
     const ch = buf.getChannelData(0);
     for (let i = 0; i < len; i++) {
       const t = i / sr;
-      // 极快起音 + 快速衰减（模拟响指瞬态）
-      const attack = Math.min(1, t / 0.001);  // 1ms 起音
-      const decay = Math.exp(-t / 0.006);       // 6ms 半衰期
-      ch[i] = (Math.random() * 2 - 1) * 0.8 * attack * decay;
+      ch[i] = (Math.random() * 2 - 1) * 0.9 * Math.min(1, t / 0.001) * Math.exp(-t / 0.01);
     }
     return buf;
   }

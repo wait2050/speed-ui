@@ -186,27 +186,45 @@ export class AudioEngine {
     this.initialized = false;
   }
 
-  /** 试听响指（合成短噪声） */
-  previewSnap(volume = 0.8): void {
+  private snapPreviewBuf: AudioBuffer | null = null;
+
+  /** 试听响指（加载真实 snap.mp3） */
+  async previewSnap(volume = 0.8): Promise<void> {
     if (!this.ctx) return;
     this.resume().catch(() => {});
+
+    // 首次加载
+    if (!this.snapPreviewBuf) {
+      try {
+        const resp = await fetch(`${BASE}snap.mp3`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const arrayBuf = await resp.arrayBuffer();
+        this.snapPreviewBuf = await this.ctx.decodeAudioData(arrayBuf);
+      } catch {
+        // 回退合成
+        this.snapPreviewBuf = this.makeSnapSynth();
+      }
+    }
+
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.snapPreviewBuf;
+    const gain = this.ctx.createGain();
+    gain.gain.value = volume;
+    src.connect(gain);
+    gain.connect(this.ctx.destination);
+    src.start(this.ctx.currentTime + 0.005);
+  }
+
+  private makeSnapSynth(): AudioBuffer {
     const sr = 44100;
     const len = Math.ceil(0.05 * sr);
     const buf = new AudioBuffer({ length: len, sampleRate: sr });
     const ch = buf.getChannelData(0);
     for (let i = 0; i < len; i++) {
       const t = i / sr;
-      const attack = Math.min(1, t / 0.001);
-      const decay = Math.exp(-t / 0.008);
-      ch[i] = (Math.random() * 2 - 1) * 0.9 * attack * decay;
+      ch[i] = (Math.random() * 2 - 1) * 0.9 * Math.min(1, t / 0.001) * Math.exp(-t / 0.008);
     }
-    const src = this.ctx.createBufferSource();
-    src.buffer = buf;
-    const gain = this.ctx.createGain();
-    gain.gain.value = volume;
-    src.connect(gain);
-    gain.connect(this.ctx.destination);
-    src.start(this.ctx.currentTime + 0.005);
+    return buf;
   }
 
   /** 播放空灵风铃音效（FM 调频合成） */
