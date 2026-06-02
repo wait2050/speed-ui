@@ -309,22 +309,30 @@ export class PlaybackEngine {
 
       // 打响指：预调度式（与节拍音共用同一套 look-ahead 机制）
       // accumulatedMs 已更新，snap 的触发时间 = 前面所有 action/rest 的累积终点
-      if (item.type === 'snap' && this.snapBuffer) {
-        const snapAbsTime = this.startTime + accumulatedMs / 1000;
-        const key = Math.round(snapAbsTime * 1000);
-        if (
-          snapAbsTime > now &&
-          snapAbsTime < now + LOOK_AHEAD_MS / 1000 &&
-          !this.scheduledSnaps.has(key)
-        ) {
-          this.scheduledSnaps.add(key);
-          const src = this.ctx.createBufferSource();
-          src.buffer = this.snapBuffer;
-          const gain = this.ctx.createGain();
-          gain.gain.value = this.snapVolume;
-          src.connect(gain);
-          gain.connect(this.ctx.destination);
-          src.start(snapAbsTime); // 精确时间点预调度
+      if (item.type === 'snap') {
+        if (!this.snapBuffer) {
+          if (this.scheduledSnaps.size === 0) console.warn('[SnapDiag] snapBuffer 为空，跳过');
+        } else {
+          const snapAbsTime = this.startTime + accumulatedMs / 1000;
+          const key = Math.round(snapAbsTime * 1000);
+          const inWindow = snapAbsTime > now && snapAbsTime < now + LOOK_AHEAD_MS / 1000;
+          const alreadyScheduled = this.scheduledSnaps.has(key);
+          const missed = snapAbsTime <= now; // 触发时刻已过，兜底立即播
+          if (this.scheduledSnaps.size < 5) {
+            console.log(`[SnapDiag] ti=${ti} now=${now.toFixed(3)} snapAbsTime=${snapAbsTime.toFixed(3)} deltaMs=${Math.round((snapAbsTime - now) * 1000)} elapsedMs=${Math.round(elapsedMs)} inWindow=${inWindow} missed=${missed} alreadyScheduled=${alreadyScheduled}`);
+          }
+          if ((inWindow || missed) && !alreadyScheduled) {
+            this.scheduledSnaps.add(key);
+            const src = this.ctx.createBufferSource();
+            src.buffer = this.snapBuffer;
+            const gain = this.ctx.createGain();
+            gain.gain.value = this.snapVolume;
+            src.connect(gain);
+            gain.connect(this.ctx.destination);
+            // 错过则立即播；否则按精确时间点预调度
+            src.start(missed ? this.ctx.currentTime + 0.005 : snapAbsTime);
+            console.log(`[SnapDiag] 已${missed ? '兜底' : '调度'} ti=${ti} startTime=${(missed ? this.ctx.currentTime + 0.005 : snapAbsTime).toFixed(3)} bufferDur=${this.snapBuffer.duration.toFixed(2)}s volume=${this.snapVolume}`);
+          }
         }
       }
     }
