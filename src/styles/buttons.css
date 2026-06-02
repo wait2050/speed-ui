@@ -1,0 +1,113 @@
+/* ============================================================
+   通用按钮
+   ============================================================ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 32px;
+  border: none;
+  border-radius: 40px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 1px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.btn:active {
+  transform: scale(0.96);
+  opacity: 0.8;
+}
+
+.btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.btn-init,
+.btn-compile {
+  background: var(--accent);
+  color: #fff;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.btn-settings-toggle {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  padding: 10px 20px;
+  margin-top: 12px;
+}
+
+.btn-start {
+  background: var(--accent);
+  color: #fff;
+  flex: 1;
+  font-size: 18px;
+  padding: 16px 32px;
+}
+
+.btn-recompile,
+.btn-skip,
+.btn-cancel {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.btn-save {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-danger {
+  background: #c0392b;
+  color: #fff;
+}
+
+.btn-end-early {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  margin-top: 32px;
+  font-size: 13px;
+  padding: 10px 24px;
+}
+
+.btn-home,
+.btn-done {
+  background: var(--accent);
+  color: #fff;
+  margin-top: 24px;
+}
+
+/* Player 控制按钮 */
+.btn-pause {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  min-height: 44px;
+  min-width: 100px;
+  padding: 12px 28px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.btn-stop {
+  background: transparent;
+  color: var(--text-secondary);
+  min-height: 44px;
+  min-width: 80px;
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 12px 20px;
+  border-radius: 24px;
+  font-size: 16px;
+  cursor: pointer;
+}

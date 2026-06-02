@@ -1,0 +1,20 @@
+/* ============================================================
+   响应式
+   ============================================================ */
+
+@media (min-width: 480px) {
+  .page {
+    max-width: 440px;
+    margin: 0 auto;
+  }
+
+  .player-action-name {
+    font-size: 32px;
+  }
+}
+
+@media (min-height: 700px) {
+  .home-page {
+    justify-content: flex-start;
+  }
+}

@@ -1,0 +1,327 @@
+/* ============================================================
+   Player 页：阶段标签 + 动作名 + 计时器 + 进度条 + 控制
+   ============================================================ */
+
+.player-page {
+  justify-content: center;
+  gap: 20px;
+  position: relative;
+}
+
+.player-phase {
+  font-size: 13px;
+  color: var(--text-secondary);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.player-action-name {
+  font-size: 28px;
+  font-weight: 300;
+  text-align: center;
+  line-height: 1.3;
+  max-width: 320px;
+  color: var(--text-primary);
+}
+
+/* ---- Timer ---- */
+.timer {
+  position: relative;
+  width: 200px;
+  height: 200px;
+}
+
+.timer-ring {
+  width: 100%;
+  height: 100%;
+}
+
+.timer-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 48px;
+  font-weight: 200;
+  color: var(--accent);
+}
+
+/* ---- Player Controls ---- */
+.player-controls {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+/* ---- Progress Bar ---- */
+.progress-bar-container {
+  width: 100%;
+  max-width: 360px;
+  margin-top: 8px;
+}
+
+.progress-bar-track {
+  position: relative;
+  height: 20px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  cursor: pointer;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+}
+
+.progress-bar-track::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  height: 6px;
+  background: inherit;
+  border-radius: 3px;
+}
+
+.progress-segment {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 3px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.progress-bar-track:hover .progress-segment {
+  opacity: 0.85;
+}
+
+.progress-playhead {
+  position: absolute;
+  top: -4px;
+  width: 12px;
+  height: 14px;
+  background: #fff;
+  border-radius: 3px;
+  transform: translateX(-50%);
+  box-shadow: 0 0 6px rgba(255,255,255,0.4);
+  transition: left 0.15s linear;
+}
+
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.2);
+}
+
+.progress-phase-label {
+  color: rgba(255,255,255,0.3);
+}
+
+/* ---- Emergency (deprecated, kept for compat) ---- */
+.emergency-btn {
+  position: fixed;
+  bottom: calc(20px + var(--safe-bottom));
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.03);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+  transition: all 0.3s;
+}
+
+.emergency-btn.visible {
+  width: auto;
+  height: auto;
+  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 16px;
+  bottom: 50%;
+  right: 50%;
+  transform: translate(50%, 50%);
+}
+
+.emergency-hint {
+  font-size: 10px;
+  color: rgba(255,255,255,0.1);
+}
+
+.emergency-confirm {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.emergency-confirm p {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* ============================================================
+   双核心自适应盲控滑轨 SubjectiveSlider 样式与呼吸霓虹暗火特效
+   ============================================================ */
+
+/* 1. 高能暗火色边缘呼吸光效应与闪烁泛光反馈 */
+.player-page.climax-active {
+  animation: redEdgeBreath 3s infinite alternate;
+}
+
+@keyframes redEdgeBreath {
+  0% {
+    box-shadow: inset 0 0 15px rgba(239, 68, 68, 0.15);
+  }
+  100% {
+    box-shadow: inset 0 0 45px rgba(239, 68, 68, 0.45);
+  }
+}
+
+/* 盲操打点强视觉感官闪烁泛光反馈。800ms 内触发一次全屏爆发闪烁 */
+.player-page.excited-flash::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.1) 0%, transparent 75%);
+  pointer-events: none;
+  animation: excitedFlashEffect 0.8s ease-out forwards;
+  z-index: 10;
+}
+
+@keyframes excitedFlashEffect {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+    box-shadow: inset 0 0 50px rgba(239, 68, 68, 0.5);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 2. 双向滑动凹槽滑轨 SubjectiveSlider 布局与样式 */
+.subjective-slider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 320px;
+  height: 48px;
+  margin: 20px auto;
+  padding: 0 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(10px);
+  overflow: visible;
+  user-select: none;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* 热身半透明灰色不可拉拽状态 */
+.subjective-slider.disabled {
+  opacity: 0.25;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.01);
+  border-color: rgba(255, 255, 255, 0.03);
+  box-shadow: none;
+}
+
+.slider-track-glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 24px;
+  pointer-events: none;
+  opacity: 0.15;
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.2) 0%, transparent 50%, rgba(239, 68, 68, 0.2) 100%);
+  transition: opacity 0.3s;
+}
+
+.subjective-slider:hover .slider-track-glow {
+  opacity: 0.3;
+}
+
+/* 重力金属回弹 Handle */
+.slider-handle {
+  position: absolute;
+  left: calc(50% - 20px);
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #444 0%, #222 100%);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6), inset 0 2px 2px rgba(255, 255, 255, 0.1);
+  cursor: grab;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease-out; /* 实时手指跟随，onTouchEnd 回弹时可以短暂变成 linear/cubic-bezier */
+}
+
+.slider-handle:active {
+  cursor: grabbing;
+  background: linear-gradient(135deg, #555 0%, #2a2a2a 100%);
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.8), 0 0 10px rgba(239, 68, 68, 0.3);
+}
+
+.slider-handle-inner {
+  width: 14px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+  transition: background-color 0.3s, box-shadow 0.3s;
+}
+
+.climax-active .slider-handle-inner {
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+
+/* 左右说明文案 */
+.slider-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  opacity: 0.65;
+}
+
+.slider-label-left {
+  color: #a8a8ff;
+  text-align: left;
+  transform: translateX(4px);
+}
+
+.slider-label-right {
+  color: #ff9f8a;
+  text-align: right;
+  transform: translateX(-4px);
+}
+
+/* 当手指向一侧偏置时，虚化并微缩另一侧说明文字 */
+.slider-handle[style*="translateX(-"] ~ .slider-label-right {
+  opacity: 0.2;
+}
+.slider-handle[style*="translateX("]:not([style*="translateX(-"]):not([style*="translateX(0px"]) ~ .slider-label-left {
+  opacity: 0.2;
+}
+

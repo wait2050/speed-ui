@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>打响指测试 v2</title>
+<style>
+  body { background: #1a1a2e; color: #eee; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 12px; padding: 20px; }
+  button { padding: 14px 28px; font-size: 16px; border: none; border-radius: 12px; cursor: pointer; width: 200px; }
+  .s1 { background: #e94560; color: #fff; }
+  .s2 { background: #ff6b35; color: #fff; }
+  .s3 { background: #f7c948; color: #1a1a2e; }
+  .s4 { background: #4fc3f7; color: #1a1a2e; }
+  .s5 { background: #81c784; color: #1a1a2e; }
+  .beat { background: #444; color: #aaa; }
+  p { font-size: 11px; color: #555; margin: 2px; }
+</style>
+</head>
+<body>
+<h3>打响指音效测试 v2</h3>
+<button class="s1" id="s1">方案A：高频短脉冲</button>
+<button class="s2" id="s2">方案B：脉冲+噪声混合</button>
+<button class="s3" id="s3">方案C：冲击响应</button>
+<button class="s4" id="s4">方案D：双频叠加</button>
+<button class="s5" id="s5">方案E：谐振滤波</button>
+<button class="beat" id="beat">节拍参考</button>
+<p id="log"></p>
+
+<script>
+const log = s => { document.getElementById('log').textContent = s; };
+
+let ctx = null;
+function init() {
+  if (ctx) return;
+  ctx = new AudioContext({ sampleRate: 44100 });
+}
+
+// A: 高频短脉冲 (5kHz sine, 8ms, 极快衰减)
+function snapA() {
+  init(); if (ctx.state === 'suspended') ctx.resume();
+  const sr = 44100;
+  const dur = 0.015;
+  const len = Math.ceil(dur * sr);
+  const buf = new AudioBuffer({ length: len, sampleRate: sr });
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    const t = i / sr;
+    ch[i] = Math.sin(2 * Math.PI * 5000 * t) * Math.exp(-t / 0.002) * 0.9;
+  }
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  src.connect(ctx.destination);
+  src.start(ctx.currentTime);
+  log('A: 5kHz pulse, 15ms');
+}
+
+// B: 脉冲 + 噪声混合
+function snapB() {
+  init(); if (ctx.state === 'suspended') ctx.resume();
+  const sr = 44100;
+  const len = Math.ceil(0.03 * sr);
+  const buf = new AudioBuffer({ length: len, sampleRate: sr });
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    const t = i / sr;
+    const tone = Math.sin(2 * Math.PI * 4000 * t) * Math.exp(-t / 0.003);
+    const noise = (Math.random() * 2 - 1) * Math.exp(-t / 0.005);
+    ch[i] = (tone * 0.6 + noise * 0.4) * Math.exp(-t / 0.008);
+  }
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2000;
+  src.connect(hp).connect(ctx.destination);
+  src.start(ctx.currentTime);
+  log('B: tone+noise mix, HP 2kHz');
+}
+
+// C: 冲击响应（极短click + 短促ring）
+function snapC() {
+  init(); if (ctx.state === 'suspended') ctx.resume();
+  const sr = 44100;
+  const len = Math.ceil(0.05 * sr);
+  const buf = new AudioBuffer({ length: len, sampleRate: sr });
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    const t = i / sr;
+    // 1ms 超短 click
+    const click = (Math.random() * 2 - 1) * Math.exp(-t / 0.0003);
+    // 1.5kHz 短 ring
+    const ring = Math.sin(2 * Math.PI * 1500 * t) * Math.exp(-t / 0.015) * 0.5;
+    ch[i] = click * 0.6 + ring;
+  }
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  src.connect(ctx.destination);
+  src.start(ctx.currentTime);
+  log('C: impulse click + ring');
+}
+
+// D: 双频叠加（高低频模拟手指弹击）
+function snapD() {
+  init(); if (ctx.state === 'suspended') ctx.resume();
+  const sr = 44100;
+  const len = Math.ceil(0.04 * sr);
+  const buf = new AudioBuffer({ length: len, sampleRate: sr });
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    const t = i / sr;
+    const hi = Math.sin(2 * Math.PI * 6000 * t) * Math.exp(-t / 0.0015);
+    const mid = Math.sin(2 * Math.PI * 2000 * t) * Math.exp(-t / 0.008);
+    ch[i] = (hi * 0.5 + mid * 0.5) * 0.8;
+  }
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  src.connect(ctx.destination);
+  src.start(ctx.currentTime);
+  log('D: 6kHz + 2kHz dual');
+}
+
+// E: 谐振滤波（noise → high-Q bandpass → 短衰减）
+function snapE() {
+  init(); if (ctx.state === 'suspended') ctx.resume();
+  const sr = 44100;
+  const len = Math.ceil(0.02 * sr);
+  const buf = new AudioBuffer({ length: len, sampleRate: sr });
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    const t = i / sr;
+    ch[i] = (Math.random() * 2 - 1) * Math.exp(-t / 0.0015) * 1.2;
+  }
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 3500;
+  bp.Q.value = 8;  // 高Q产生短促ring
+  const gain = ctx.createGain(); gain.gain.value = 1.5;
+  src.connect(bp).connect(gain).connect(ctx.destination);
+  src.start(ctx.currentTime);
+  log('E: noise → BP 3.5kHz Q=8');
+}
+
+function playBeat() {
+  init(); if (ctx.state === 'suspended') ctx.resume();
+  const osc = ctx.createOscillator();
+  osc.type = 'sine'; osc.frequency.value = 800;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.3, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(); osc.stop(ctx.currentTime + 0.05);
+  log('节拍参考');
+}
+
+document.getElementById('s1').onclick = snapA;
+document.getElementById('s2').onclick = snapB;
+document.getElementById('s3').onclick = snapC;
+document.getElementById('s4').onclick = snapD;
+document.getElementById('s5').onclick = snapE;
+document.getElementById('beat').onclick = playBeat;
+</script>
+</body>
+</html>

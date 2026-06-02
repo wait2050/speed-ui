@@ -1,0 +1,224 @@
+/* ============================================================
+   Preview 页：统计 + 序列列表 + 可编辑动作
+   ============================================================ */
+
+.preview-page {
+  gap: 12px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+}
+
+.stat-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+}
+
+.stat-value {
+  display: block;
+  font-size: 24px;
+  font-weight: 300;
+  color: var(--accent);
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+
+.phase-summary {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+  margin: 8px 0;
+}
+
+.sequence-scroll {
+  flex: 1;
+  width: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  max-height: 40vh;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+/* ---- 只读序列列表 ---- */
+.sequence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.seq-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.seq-action {
+  background: rgba(233, 69, 96, 0.08);
+}
+
+.seq-rest {
+  background: rgba(255,255,255,0.03);
+}
+
+.seq-snap {
+  background: rgba(255,200,50,0.04);
+  justify-content: space-between;
+  padding: 4px 12px;
+}
+.seq-snap .seq-label {
+  font-size: 12px;
+  color: rgba(255,200,50,0.5);
+}
+
+.seq-transition {
+  background: rgba(255,255,255,0.02);
+  justify-content: center;
+  padding: 4px;
+}
+
+.seq-label {
+  color: var(--text-primary);
+}
+
+.seq-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.seq-phase {
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.seq-dur {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 40px;
+  text-align: right;
+}
+
+.seq-signal {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* ---- 可编辑序列 ---- */
+.edit-action-row {
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.edit-action-row.rest-row {
+  opacity: 0.5;
+  background: rgba(255,255,255,0.015);
+}
+
+.rest-name {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.edit-action-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.lock-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px;
+  opacity: 0.4;
+}
+
+.lock-btn.locked {
+  opacity: 1;
+}
+
+.edit-action-name {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edit-action-dur {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 32px;
+  text-align: right;
+}
+
+.edit-expand-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.edit-action-options {
+  padding: 6px 10px 10px 34px;
+}
+
+.replace-label {
+  font-size: 11px;
+  color: rgba(255,255,255,0.2);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.replace-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.replace-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.replace-btn:active {
+  border-color: var(--accent);
+  color: var(--accent);
+}

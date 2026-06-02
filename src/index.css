@@ -1,0 +1,15 @@
+/* ============================================================
+   节奏按摩引导器 · 样式入口
+   所有样式按模块拆分，通过 @import 聚合
+   ============================================================ */
+
+@import './styles/global.css';
+@import './styles/buttons.css';
+@import './styles/home.css';
+@import './styles/preview.css';
+@import './styles/player.css';
+@import './styles/landing.css';
+@import './styles/sidebar.css';
+@import './styles/history-detail.css';
+@import './styles/footer.css';
+@import './styles/responsive.css';

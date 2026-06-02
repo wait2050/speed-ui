@@ -1,0 +1,101 @@
+/* ============================================================
+   Landing 页：呼吸灯 + 评分 + 收藏
+   ============================================================ */
+
+.landing-page {
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+}
+
+/* ---- Breathing ---- */
+.breathing-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.breathing-circle {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(233,69,96,0.3), rgba(233,69,96,0.05));
+  animation: breathe 4s ease-in-out infinite;
+}
+
+.breathing-text {
+  font-size: 16px;
+  color: var(--text-secondary);
+  letter-spacing: 2px;
+}
+
+.breathing-sub {
+  font-size: 12px;
+  color: rgba(255,255,255,0.2);
+}
+
+/* ---- Rating ---- */
+.rating-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.stars {
+  display: flex;
+  gap: 8px;
+}
+
+.star {
+  background: none;
+  border: none;
+  font-size: 36px;
+  cursor: pointer;
+  color: var(--border);
+  transition: color 0.15s;
+}
+
+.star.active {
+  color: #f1c40f;
+}
+
+.star:disabled {
+  cursor: default;
+}
+
+.favorite-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.favorite-section p {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.fav-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 14px;
+  text-align: center;
+  outline: none;
+}
+
+.fav-input:focus {
+  border-color: var(--accent);
+}
+
+.fav-buttons {
+  display: flex;
+  gap: 12px;
+}

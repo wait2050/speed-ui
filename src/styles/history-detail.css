@@ -1,0 +1,391 @@
+/* ============================================================
+   HistoryDetail 详情页：热力图 + 阶段分布 + AI 指令
+   ============================================================ */
+
+.history-detail-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 60px 20px 40px;
+  max-width: 640px;
+  margin: 0 auto;
+  overflow-y: auto;
+  min-height: 100vh;
+}
+
+/* ---- 头部 ---- */
+.hd-header {
+  text-align: center;
+}
+
+.hd-title {
+  font-size: 24px;
+  font-weight: 300;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+  letter-spacing: 2px;
+}
+
+.hd-meta {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.hd-rating {
+  color: #ffc107;
+}
+
+/* ---- 通用区块标题 ---- */
+.hd-section-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hd-point-count {
+  font-size: 11px;
+  color: #7c4dff;
+  font-weight: 400;
+}
+
+/* ---- 阶段分布条 ---- */
+.hd-phase-bar-section {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 16px;
+  padding: 16px;
+  backdrop-filter: blur(10px);
+}
+
+.hd-phase-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  gap: 1px;
+}
+
+.hd-phase-segment {
+  flex-shrink: 0;
+  border-radius: 2px;
+  transition: opacity 0.2s;
+}
+
+.hd-phase-segment:hover {
+  opacity: 1 !important;
+}
+
+.hd-phase-legend {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.hd-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.hd-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ---- 快感热力图 ---- */
+.hd-heatmap-section {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 16px;
+  padding: 16px;
+  backdrop-filter: blur(10px);
+}
+
+.hd-heatmap-container {
+  position: relative;
+}
+
+.hd-heatmap-bar {
+  position: relative;
+  height: 32px;
+  border-radius: 16px;
+  overflow: visible;
+}
+
+.hd-heatmap-gradient {
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  background: linear-gradient(90deg,
+    #4fc3f7 0%,
+    #7c4dff 25%,
+    #e040fb 50%,
+    #ff4081 75%,
+    #ff1744 100%
+  );
+  opacity: 0.3;
+}
+
+/* ---- 打点粒子 ---- */
+.hd-particle {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  z-index: 2;
+}
+
+.hd-particle-glow {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.4;
+  filter: blur(6px);
+  animation: particle-breathe 2s ease-in-out infinite;
+}
+
+.hd-particle-core {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 8px 2px rgba(255, 255, 255, 0.6);
+  z-index: 1;
+}
+
+@keyframes particle-breathe {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.4; }
+  50% { transform: translate(-50%, -50%) scale(1.5); opacity: 0.7; }
+}
+
+.hd-particle:hover .hd-particle-glow {
+  opacity: 0.9;
+  filter: blur(4px);
+}
+
+.hd-particle:hover .hd-particle-core {
+  transform: scale(1.3);
+}
+
+/* ---- 时间刻度 ---- */
+.hd-heatmap-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 9px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+/* ---- 悬浮气泡 ---- */
+.hd-tooltip {
+  position: absolute;
+  top: 44px;
+  transform: translateX(-50%);
+  background: rgba(30, 20, 50, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(124, 77, 255, 0.3);
+  border-radius: 12px;
+  padding: 10px 14px;
+  min-width: 160px;
+  z-index: 10;
+  animation: tooltip-in 0.2s ease;
+  pointer-events: none;
+}
+
+@keyframes tooltip-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.hd-tooltip-time {
+  font-size: 11px;
+  color: #7c4dff;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.hd-tooltip-action {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.hd-tooltip-meta {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.hd-tooltip-badge {
+  display: inline-block;
+  font-size: 10px;
+  background: linear-gradient(135deg, #ff4081, #ff6e40);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+/* ---- 打点明细列表 ---- */
+.hd-points-list-section {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 16px;
+  padding: 16px;
+  backdrop-filter: blur(10px);
+}
+
+.hd-points-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hd-point-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.hd-point-item:last-child {
+  border-bottom: none;
+}
+
+.hd-point-index {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.hd-point-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hd-point-name {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.hd-point-detail {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* ---- AI 迭代指令 ---- */
+.hd-ai-section {
+  background: rgba(124, 77, 255, 0.05);
+  border: 1px solid rgba(124, 77, 255, 0.15);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.hd-ai-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+
+.hd-ai-prompt-box {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  padding: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.hd-ai-prompt-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  font-family: inherit;
+  line-height: 1.6;
+}
+
+.hd-copy-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #7c4dff, #e040fb);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.hd-copy-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.hd-copy-btn.copied {
+  background: linear-gradient(135deg, #00c853, #69f0ae);
+}
+
+/* ---- 底部操作 ---- */
+.hd-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.hd-actions .btn {
+  flex: 1;
+  padding: 14px;
+  font-size: 14px;
+  border-radius: 14px;
+  text-align: center;
+}
+
+.btn-back {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btn-back:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.btn-load {
+  background: linear-gradient(135deg, #7c4dff, #4fc3f7);
+  color: #fff;
+  border: none;
+}
+
+.btn-load:hover {
+  filter: brightness(1.1);
+}
