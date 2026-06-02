@@ -212,7 +212,11 @@ export const Home: React.FC = () => {
           ))}
         </div>
 
-        <div className="accordion-sub-label">打响指次数</div>
+      </AccordionCard>
+
+      {/* 手风琴卡片 2：响指次数 */}
+      <AccordionCard title="响指次数" badge={`${Object.values(snapCounts).reduce((a, b) => a + b, 0)} 次`} defaultOpen>
+        <p className="accordion-sub-label">每个阶段随机插入 0-4 次响指（热身阶段除外）</p>
         <div className="phase-toggles-row snap-toggles">
           {([
             ['core', '核心'], ['sprint_start', '起冲'], ['sprint_accel', '加速'],
@@ -234,8 +238,8 @@ export const Home: React.FC = () => {
         </div>
       </AccordionCard>
 
-      {/* 手风琴卡片 2：动作选择 */}
-      <AccordionCard title="可选动作" badge={`${enabledActions.size}/7`}>
+      {/* 手风琴卡片 3：动作选择 */}
+      <AccordionCard title="可选动作" badge={`${enabledActions.size}/7`} defaultOpen>
         <div className="phase-toggles-row">
           {ALL_ACTION_NAMES.map(name => (
             <button
@@ -249,8 +253,8 @@ export const Home: React.FC = () => {
         </div>
       </AccordionCard>
 
-      {/* 手风琴卡片 3：高级设置（默认折叠） */}
-      <AccordionCard title="高级设置" defaultOpen={false}>
+      {/* 手风琴卡片 4：高级设置 */}
+      <AccordionCard title="高级设置" defaultOpen>
         {(Object.keys(prefs.customBpm) as SpeedTier[]).map(tier => (
           <div key={tier} className="settings-row">
             <span className="settings-label">{TIER_LABELS[tier]}</span>
