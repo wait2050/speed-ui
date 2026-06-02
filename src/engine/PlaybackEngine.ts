@@ -487,9 +487,13 @@ export class PlaybackEngine {
     return buf;
   }
 
-  /** 播放打响指（真实音频直接播放） */
+  /** 播放打响指 */
   playSnap(): void {
     if (!this.ctx || !this.snapBuffer) return;
+    // 确保 AudioContext 处于运行状态（iOS 切后台后会挂起）
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
     const src = this.ctx.createBufferSource();
     src.buffer = this.snapBuffer;
     const gain = this.ctx.createGain();

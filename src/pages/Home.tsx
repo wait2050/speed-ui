@@ -67,7 +67,7 @@ export const Home: React.FC = () => {
   const [afterglowMin, setAfterglowMin] = useState(1);
 
   const [snapCounts, setSnapCounts] = useState<Record<string, number>>({
-    core: 0, sprint_start: 0, sprint_accel: 0, sprint_peak: 0, climax: 0, afterglow: 0,
+    core: 2, sprint_start: 1, sprint_accel: 1, sprint_peak: 1, climax: 2, afterglow: 1,
   });
 
   const togglePhase = useCallback((p: PhaseOption) => {
