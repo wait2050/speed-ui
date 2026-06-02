@@ -1,6 +1,5 @@
 // ============================================================
-// Player — 沉浸播放器 · 三态系统 · 分屏手势 · 触觉反馈
-// The Sanctuary — Breathing Space v3.0
+// Player — 播放器：滑块 + 暂停/停止 + 兴奋打点/高潮冲刺
 // ============================================================
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useAppStore } from '../state/store';
@@ -20,8 +19,6 @@ const PHASE_LABELS: Record<Phase, string> = {
   sprint_start: '起冲', sprint_accel: '加速', sprint_peak: '顶峰',
   climax: '冲刺', afterglow: '余韵', cooldown: '收尾', landing: '着陆',
 };
-
-type PlayerUIState = 'sleep' | 'wake';
 
 /** 安全调用 navigator.vibrate，桌面端静默降级 */
 function triggerHaptic(pattern: number | number[]) {
@@ -62,11 +59,6 @@ export const Player: React.FC = () => {
   const [beatPulse, setBeatPulse] = useState(0);
   const beatRafRef = useRef<number>(0);
 
-  // ---- 三态 UI（初始唤醒态，3 秒无操作后褪入息屏） ----
-  const [uiState, setUiState] = useState<PlayerUIState>('wake');
-  const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [controlsOpacity, setControlsOpacity] = useState(0.5);
-
   // ---- SubjectiveSlider 滑块：左滑=兴奋打点，右滑=高潮/余韵 ----
   const [gestureIndicator, setGestureIndicator] = useState<{
     zone: 'left' | 'right';
@@ -80,12 +72,8 @@ export const Player: React.FC = () => {
   const touchStartX = useRef(0);
   const exciteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 手势标记（防滑动误触单击）
+  // 手势标记（防滑动误触）
   const gestureHappened = useRef(false);
-
-  // ---- 双击检测 ----
-  const lastTapTime = useRef(0);
-  const [showDoubleTapRipple, setShowDoubleTapRipple] = useState(false);
 
   // ---- 涟漪效果 ----
   const [ripples, setRipples] = useState<number[]>([]);
@@ -126,19 +114,12 @@ export const Player: React.FC = () => {
     // 检查是否需要新手引导
     if (!hasCompletedOnboarding()) {
       setShowOnboarding(true);
-    } else {
-      // 已过引导期：初始唤醒态，3 秒后自动褪入息屏
-      wakeTimerRef.current = setTimeout(() => {
-        setUiState('sleep');
-        setControlsOpacity(0);
-      }, 3000);
     }
 
     return () => {
       engine.destroy();
       engineRef.current = null;
       cancelAnimationFrame(beatRafRef.current);
-      if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -165,44 +146,16 @@ export const Player: React.FC = () => {
     return () => clearInterval(iv);
   }, [compiled]);
 
-  // ---- 唤醒自动褪去 ----
-  const wakeUp = useCallback(() => {
-    setUiState('wake');
-    setControlsOpacity(0.5);
-    if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current);
-    wakeTimerRef.current = setTimeout(() => {
-      setUiState('sleep');
-      setControlsOpacity(0);
-    }, 3000);
-  }, []);
-
-  // 唤醒态下任何交互重置计时器
-  const resetWakeTimer = useCallback(() => {
-    if (uiState === 'wake') {
-      if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current);
-      wakeTimerRef.current = setTimeout(() => {
-        setUiState('sleep');
-        setControlsOpacity(0);
-      }, 3000);
-    }
-  }, [uiState]);
-
   // ---- 核心操作 ----
   const togglePause = useCallback(() => {
     const e = engineRef.current; if (!e) return;
-    const wasPaused = e.isPaused;
-    if (wasPaused) e.resume(); else e.pause();
+    if (e.isPaused) e.resume(); else e.pause();
     triggerHaptic([30, 50, 30]);
-    // 双击水波纹
-    setShowDoubleTapRipple(true);
-    setTimeout(() => setShowDoubleTapRipple(false), 600);
-    wakeUp();
-  }, [wakeUp]);
+  }, []);
 
   const handleSeek = useCallback((ms: number) => {
     engineRef.current?.seek(ms);
-    resetWakeTimer();
-  }, [resetWakeTimer]);
+  }, []);
 
   const handleStop = useCallback(() => {
     engineRef.current?.destroy();
@@ -231,11 +184,10 @@ export const Player: React.FC = () => {
   // SubjectiveSlider 拖拽：左滑兴奋打点，右滑高潮/余韵
   // ============================================================
   const handleSliderTouchStart = useCallback((e: React.TouchEvent) => {
-    e.stopPropagation(); // 防止冒泡触发页面 tap
+    e.stopPropagation();
     touchStartX.current = e.touches[0].clientX;
     setIsDragging(true);
-    wakeUp();
-  }, [wakeUp]);
+  }, []);
 
   const handleSliderTouchMove = useCallback((e: React.TouchEvent) => {
     if (!isDragging) return;
@@ -272,27 +224,7 @@ export const Player: React.FC = () => {
     }
     setTimeout(() => setGestureIndicator(null), 800);
     setOffsetX(0);
-    resetWakeTimer();
-  }, [isDragging, ds.phase, offsetX, recordExcitement, setSubjectiveClimax, resetWakeTimer]);
-
-  // ---- 单击唤醒 / 双击暂停 ----
-  const handleTap = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    // 如果刚发生了滑动手势，忽略此次单击
-    if (gestureHappened.current) {
-      gestureHappened.current = false;
-      return;
-    }
-    const now = Date.now();
-    if (now - lastTapTime.current < 350) {
-      // 双击 → 播放/暂停
-      togglePause();
-      lastTapTime.current = 0;
-    } else {
-      // 单击 → 唤醒
-      lastTapTime.current = now;
-      wakeUp();
-    }
-  }, [togglePause, wakeUp]);
+  }, [isDragging, ds.phase, offsetX, recordExcitement, setSubjectiveClimax]);
 
   // ---- Onboarding 处理 ----
   const handleOnboardingDoubleTap = useCallback(() => {
@@ -330,11 +262,10 @@ export const Player: React.FC = () => {
         }
         setTimeout(() => setGestureIndicator(null), 800);
       }
-      wakeUp();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [ds.phase, recordExcitement, setSubjectiveClimax, togglePause, wakeUp]);
+  }, [ds.phase, recordExcitement, setSubjectiveClimax, togglePause]);
 
   const segments: PhaseSegment[] = useMemo(
     () => compiled ? computePhaseSegments(compiled.timeline) : [],
@@ -348,22 +279,13 @@ export const Player: React.FC = () => {
 
   return (
     <div
-      className={`page player-page ${subjectiveClimaxTriggered || ds.phase === 'climax' ? 'climax-active' : ''} ${uiState} ${isExcited ? 'excited-flash' : ''}`}
+      className={`page player-page ${subjectiveClimaxTriggered || ds.phase === 'climax' ? 'climax-active' : ''} ${isExcited ? 'excited-flash' : ''}`}
       data-phase={ds.phase}
-      onClick={handleTap}
     >
-      {/* 息屏态边缘微光 + 唤醒单击区域 */}
-      <div className="player-wake-zone" />
-      {/* 息屏态边缘微光刻度线 */}
-      <div className={`sleep-edge-glow ${uiState === 'sleep' ? 'visible' : ''}`} />
-
       {/* 涟漪效果 */}
       {ripples.map(id => (
         <div key={id} className="excited-ripple" />
       ))}
-
-      {/* 双击水波纹 */}
-      {showDoubleTapRipple && <div className="doubletap-ripple" />}
 
       {/* 分屏手势指示器 */}
       {gestureIndicator && (
@@ -373,46 +295,45 @@ export const Player: React.FC = () => {
         </div>
       )}
 
-      {/* 控制层 — 50% 透明度唤醒态 */}
-      <div className="player-controls-layer" style={{ opacity: controlsOpacity, pointerEvents: uiState === 'sleep' ? 'none' : 'auto' }}>
-        <ProgressBar
-          segments={segments}
-          elapsedMs={ds.totalElapsedMs}
-          totalMs={totalMs}
-          currentPhaseLabel={PHASE_LABELS[ds.phase] ?? ds.phase}
-          onSeek={handleSeek}
-        />
-        <div className="player-phase">{PHASE_LABELS[ds.phase] ?? ds.phase}</div>
-        <div className="player-action-name">{ds.actionName}</div>
-        <Timer remainingMs={ds.actionRemainingMs} totalMs={ds.actionRemainingMs || 60000} beatPulse={beatPulse} />
+      <ProgressBar
+        segments={segments}
+        elapsedMs={ds.totalElapsedMs}
+        totalMs={totalMs}
+        currentPhaseLabel={PHASE_LABELS[ds.phase] ?? ds.phase}
+        onSeek={handleSeek}
+      />
+      <div className="player-phase">{PHASE_LABELS[ds.phase] ?? ds.phase}</div>
+      <div className="player-action-name">{ds.actionName}</div>
+      <Timer remainingMs={ds.actionRemainingMs} totalMs={ds.actionRemainingMs || 60000} beatPulse={beatPulse} />
 
-        {/* SubjectiveSlider — 水平拖拽滑块 */}
-        <div className="subjective-slider">
-          <div className="slider-track-glow" />
-          <div className="slider-label slider-label-left">⚡ 兴奋打点 (左滑/←)</div>
-          <div
-            className="slider-handle"
-            style={{ transform: `translateX(${offsetX}px)` }}
-            onTouchStart={handleSliderTouchStart}
-            onTouchMove={handleSliderTouchMove}
-            onTouchEnd={handleSliderTouchEnd}
-          >
-            <div className="slider-handle-inner" />
-          </div>
-          <div className="slider-label slider-label-right">
-            {ds.phase === 'warmup'
-              ? '🔒 热身中'
-              : ds.phase === 'climax'
-                ? '✨ 释放余韵 (右滑/→)'
-                : '🔥 开启冲刺 (右滑/→)'}
-          </div>
+      {/* SubjectiveSlider — 水平拖拽滑块 */}
+      <div className="subjective-slider">
+        <div className="slider-track-glow" />
+        <div className="slider-label slider-label-left">⚡ 兴奋打点 (左滑/←)</div>
+        <div
+          className="slider-handle"
+          style={{ transform: `translateX(${offsetX}px)` }}
+          onTouchStart={handleSliderTouchStart}
+          onTouchMove={handleSliderTouchMove}
+          onTouchEnd={handleSliderTouchEnd}
+        >
+          <div className="slider-handle-inner" />
         </div>
+        <div className="slider-label slider-label-right">
+          {ds.phase === 'warmup'
+            ? '🔒 热身中'
+            : ds.phase === 'climax'
+              ? '✨ 释放余韵 (右滑/→)'
+              : '🔥 开启冲刺 (右滑/→)'}
+        </div>
+      </div>
 
-        <button className="btn-secondary btn-icon btn-stop-inline" onClick={handleStop}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <rect x="6" y="6" width="12" height="12" rx="2"/>
-          </svg>
+      {/* 暂停 + 停止按钮 */}
+      <div className="player-controls">
+        <button className="btn btn-pause" onClick={togglePause}>
+          {ds.isPaused ? '▶ 继续' : '⏸ 暂停'}
         </button>
+        <button className="btn btn-stop" onClick={handleStop}>■ 停止</button>
       </div>
 
       {/* Onboarding 引导遮罩 */}
