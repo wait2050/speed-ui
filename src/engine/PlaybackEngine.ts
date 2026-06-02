@@ -110,17 +110,21 @@ export class PlaybackEngine {
 
   /** 异步加载响指 MP3 */
   private async loadSnap(): Promise<void> {
-    if (!this.ctx) return;
+    if (!this.ctx) { console.log('[Engine] loadSnap: ctx 为空'); return; }
     try {
       const base = import.meta.env.BASE_URL || '/';
-      const resp = await fetch(`${base}snap.mp3`);
+      const url = `${base}snap.mp3`;
+      console.log(`[Engine] loadSnap: 加载 ${url}`);
+      const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const arrayBuf = await resp.arrayBuffer();
+      console.log(`[Engine] loadSnap: 下载 ${arrayBuf.byteLength} 字节`);
       this.snapBuffer = await this.ctx.decodeAudioData(arrayBuf);
-      console.log('[PlaybackEngine] 响指音频加载成功');
+      console.log(`[Engine] loadSnap: 解码成功, ${this.snapBuffer.duration.toFixed(2)}s`);
     } catch (e) {
-      console.warn('[PlaybackEngine] 响指音频加载失败，回退合成', e);
+      console.warn('[Engine] loadSnap: 加载失败，回退合成', e);
       this.snapBuffer = this.makeSnap();
+      console.log(`[Engine] loadSnap: 合成回退 ${this.snapBuffer.duration.toFixed(2)}s`);
     }
   }
 
@@ -302,6 +306,7 @@ export class PlaybackEngine {
       if (item.type === 'snap') {
         const snapKey = Math.round(accumulatedMs);
         if (elapsedMs >= accumulatedMs && !this.snapsPlayed.has(snapKey)) {
+          console.log(`[Engine] 播放响指 @${accumulatedMs}ms snapKey=${snapKey}`);
           this.snapsPlayed.add(snapKey);
           this.playSnap();
         }
@@ -492,7 +497,8 @@ export class PlaybackEngine {
 
   /** 播放打响指 */
   playSnap(): void {
-    if (!this.ctx || !this.snapBuffer) return;
+    if (!this.ctx) { console.log('[Engine] playSnap: ctx 为空'); return; }
+    if (!this.snapBuffer) { console.log('[Engine] playSnap: snapBuffer 为空'); return; }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
     }

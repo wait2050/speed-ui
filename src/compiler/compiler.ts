@@ -278,7 +278,11 @@ export function compileSequence(
 
   // ---- 插入打响指（仅非热身阶段）----
   if (snapCounts) {
+    const before = timeline.length;
     insertSnaps(timeline, snapCounts);
+    console.log(`[Compiler] 响指插入: ${JSON.stringify(snapCounts)} → ${timeline.length - before} 个响指`);
+  } else {
+    console.log('[Compiler] snapCounts 为空，跳过响指插入');
   }
 
   // ---- 计算统计 ----
