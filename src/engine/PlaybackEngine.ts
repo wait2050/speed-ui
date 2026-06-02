@@ -103,9 +103,9 @@ export class PlaybackEngine {
 
     this.initialized = true;
 
-    // 后台加载语音 + 响指音频
-    this.loadVoices();
-    this.loadSnap();
+    // 预加载语音 + 响指音频（await 确保 ready 后再播放）
+    await this.loadVoices();
+    this.loadSnap(); // 响指容错性好，后台加载即可
   }
 
   /** 异步加载响指 MP3 */

@@ -62,10 +62,10 @@ export const Player: React.FC = () => {
   const [beatPulse, setBeatPulse] = useState(0);
   const beatRafRef = useRef<number>(0);
 
-  // ---- 三态 UI ----
-  const [uiState, setUiState] = useState<PlayerUIState>('sleep');
+  // ---- 三态 UI（初始唤醒态，3 秒无操作后褪入息屏） ----
+  const [uiState, setUiState] = useState<PlayerUIState>('wake');
   const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [controlsOpacity, setControlsOpacity] = useState(0);
+  const [controlsOpacity, setControlsOpacity] = useState(0.5);
 
   // ---- 分屏手势 ----
   const [volume, setVolume] = useState(50);
@@ -124,12 +124,19 @@ export const Player: React.FC = () => {
     // 检查是否需要新手引导
     if (!hasCompletedOnboarding()) {
       setShowOnboarding(true);
+    } else {
+      // 已过引导期：初始唤醒态，3 秒后自动褪入息屏
+      wakeTimerRef.current = setTimeout(() => {
+        setUiState('sleep');
+        setControlsOpacity(0);
+      }, 3000);
     }
 
     return () => {
       engine.destroy();
       engineRef.current = null;
       cancelAnimationFrame(beatRafRef.current);
+      if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
