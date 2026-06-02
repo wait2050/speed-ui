@@ -64,7 +64,7 @@ export class PlaybackEngine {
   private elapsedBeforePause = 0;
   private timerId: ReturnType<typeof setInterval> | null = null;
   private scheduledBeats = new Set<number>();
-  private _snapSeq = 0; // 响指递增序号，同位置多响指也能独立播放
+  private snapsPlayed = new Set<number>(); // 用 timeline 索引去重
   private lastVoiceKey = '';
   private voiceEndTime = 0;
 
@@ -156,7 +156,7 @@ export class PlaybackEngine {
     this.pausedAt = null;
     this.elapsedBeforePause = 0;
     this.scheduledBeats.clear();
-    this._snapSeq = 0;
+    this.snapsPlayed.clear();
     this.excitementPoints = [];
     this.lastVoiceKey = '';
     this.voiceEndTime = 0;
@@ -192,7 +192,7 @@ export class PlaybackEngine {
     const wasPaused = this.isPaused;
     if (this.timerId) { clearInterval(this.timerId); this.timerId = null; }
     this.scheduledBeats.clear();
-    this._snapSeq = 0;
+    this.snapsPlayed.clear();
     this.lastVoiceKey = '';
     this.voiceEndTime = 0;
     this.startTime = this.ctx.currentTime - targetMs / 1000;
@@ -242,7 +242,8 @@ export class PlaybackEngine {
     let accumulatedMs = 0;
     let foundCurrent = false;
 
-    for (const item of this.timeline) {
+    for (let ti = 0; ti < this.timeline.length; ti++) {
+      const item = this.timeline[ti];
       if (item.type === 'end') {
         if (elapsedMs >= accumulatedMs) {
           this.isRunning = false;
@@ -302,11 +303,11 @@ export class PlaybackEngine {
         }
       }
 
-      // 打响指：经过时立即播放（用递增序号去重，同位置多响指不冲突）
+      // 打响指：用 timeline 索引 ti 去重，同位置多响指各有一个唯一 ti
       if (item.type === 'snap') {
-        const seq = this._snapSeq++;
-        if (elapsedMs >= accumulatedMs) {
-          console.log(`[Engine] 播放响指 @${accumulatedMs}ms #${seq}`);
+        if (elapsedMs >= accumulatedMs && !this.snapsPlayed.has(ti)) {
+          this.snapsPlayed.add(ti);
+          console.log(`[Engine] 播放响指 @${accumulatedMs}ms ti=${ti}`);
           this.playSnap();
         }
       }
