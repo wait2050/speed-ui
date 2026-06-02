@@ -14,13 +14,15 @@ interface Props {
   onLoadSequence: (seq: CompiledSequence) => void;
 }
 
-type Tab = 'history' | 'favorites' | 'stats';
+type Tab = 'history' | 'favorites' | 'stats' | 'settings';
 
 export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) => {
   const [tab, setTab] = useState<Tab>('history');
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
+  const snapVol = useAppStore((s) => s.snapVolume);
+  const setSnapVol = useAppStore((s) => s.setSnapVolume);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const showHistoryDetail = useAppStore((s) => s.showHistoryDetail);
 
@@ -66,6 +68,7 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
     { key: 'history', label: `历史 (${history.length})` },
     { key: 'favorites', label: `收藏 (${favorites.length})` },
     { key: 'stats', label: '统计' },
+    { key: 'settings', label: '设置' },
   ];
 
   // 计算统计
@@ -202,6 +205,24 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* 设置 */}
+        {tab === 'settings' && (
+          <div className="sidebar-stats">
+            <div className="stat-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+              <span>👆 响指音量</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={snapVol}
+                onChange={e => setSnapVol(parseInt(e.target.value))}
+                style={{ width: '100%' }}
+              />
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{snapVol}%</span>
+            </div>
           </div>
         )}
       </div>

@@ -11,6 +11,7 @@ interface AppStore {
   subjectiveClimaxTriggered: boolean;
   selectedHistoryId: string | null;
   excitementPoints: ExcitementPoint[];
+  snapVolume: number;
   setDuration: (d: number) => void;
   startCompiling: () => void;
   compilationDone: (seq: CompiledSequence) => void;
@@ -20,6 +21,12 @@ interface AppStore {
   setSubjectiveClimax: (triggered: boolean) => void;
   showHistoryDetail: (id: string) => void;
   addExcitementPoint: (point: ExcitementPoint) => void;
+  setSnapVolume: (v: number) => void;
+}
+
+const SNAP_VOL_KEY = 'rhythm_snap_volume';
+function loadSnapVol(): number {
+  try { const v = localStorage.getItem(SNAP_VOL_KEY); return v !== null ? parseFloat(v) : 80; } catch { return 80; }
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -29,6 +36,7 @@ export const useAppStore = create<AppStore>((set) => ({
   subjectiveClimaxTriggered: false,
   selectedHistoryId: null,
   excitementPoints: [],
+  snapVolume: loadSnapVol(),
 
   setDuration: (d) => set({ totalDuration: d }),
   startCompiling: () => set({ status: 'COMPILING' }),
@@ -41,4 +49,8 @@ export const useAppStore = create<AppStore>((set) => ({
   addExcitementPoint: (point) => set((state) => ({
     excitementPoints: [...state.excitementPoints, point],
   })),
+  setSnapVolume: (v) => {
+    try { localStorage.setItem(SNAP_VOL_KEY, String(v)); } catch {}
+    set({ snapVolume: v });
+  },
 }));

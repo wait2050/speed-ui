@@ -42,7 +42,7 @@ function markOnboardingComplete(): void {
 // 组件
 // ============================================================
 export const Player: React.FC = () => {
-  const { compiled, reset, subjectiveClimaxTriggered, setSubjectiveClimax, playbackFinished, addExcitementPoint } = useAppStore();
+  const { compiled, reset, subjectiveClimaxTriggered, setSubjectiveClimax, playbackFinished, addExcitementPoint, snapVolume } = useAppStore();
   const engineRef = useRef<PlaybackEngine | null>(null);
   const compiledRef = useRef(compiled);
   compiledRef.current = compiled;
@@ -93,6 +93,7 @@ export const Player: React.FC = () => {
     engineRef.current = engine;
 
     engine.init().then(() => {
+      engine.setSnapVolume(snapVolume / 100);
       engine.setOnUpdate(setDs);
       engine.setOnFinished(playbackFinished);
 
@@ -122,6 +123,11 @@ export const Player: React.FC = () => {
       cancelAnimationFrame(beatRafRef.current);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- 响指音量同步 ----
+  useEffect(() => {
+    engineRef.current?.setSnapVolume(snapVolume / 100);
+  }, [snapVolume]);
 
   // ---- 页面可见性 ----
   useEffect(() => {

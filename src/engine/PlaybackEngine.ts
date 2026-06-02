@@ -55,6 +55,7 @@ export class PlaybackEngine {
   private voiceBuffers = new Map<string, AudioBuffer>();
   private snapBuffer: AudioBuffer | null = null;
   private excitementBuffer: AudioBuffer | null = null;
+  private snapVolume = 1.0; // 0.0–1.0，可由外部设置
   private initialized = false;
 
   private timeline: TimelineItem[] = [];
@@ -487,17 +488,21 @@ export class PlaybackEngine {
     return buf;
   }
 
+  /** 设置响指音量 (0.0–1.0) */
+  setSnapVolume(v: number): void {
+    this.snapVolume = Math.max(0, Math.min(1, v));
+  }
+
   /** 播放打响指 */
   playSnap(): void {
     if (!this.ctx || !this.snapBuffer) return;
-    // 确保 AudioContext 处于运行状态（iOS 切后台后会挂起）
     if (this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
     }
     const src = this.ctx.createBufferSource();
     src.buffer = this.snapBuffer;
     const gain = this.ctx.createGain();
-    gain.gain.value = 1.0;
+    gain.gain.value = this.snapVolume;
     src.connect(gain);
     gain.connect(this.ctx.destination);
     src.start(this.ctx.currentTime + 0.005);
