@@ -309,8 +309,10 @@ export class PlaybackEngine {
 
       // 打响指：accumulatedMs 已更新，snap 的触发时间 = 前面所有 action/rest 的累积终点
       if (item.type === 'snap') {
+        console.log(`[Snap] ti=${ti} elapsedMs=${Math.round(elapsedMs)} accumulatedMs=${Math.round(accumulatedMs)} played=${this.snapsPlayed.has(ti)}`);
         if (elapsedMs >= accumulatedMs && !this.snapsPlayed.has(ti)) {
           this.snapsPlayed.add(ti);
+          console.log(`[Snap] 触发播放 ti=${ti}`);
           this.playSnap();
         }
       }
