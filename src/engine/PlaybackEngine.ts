@@ -303,17 +303,16 @@ export class PlaybackEngine {
         }
       }
 
-      // 打响指：用 timeline 索引 ti 去重，同位置多响指各有一个唯一 ti
+      if (item.type === 'action' || item.type === 'rest') {
+        accumulatedMs += item.duration;
+      }
+
+      // 打响指：accumulatedMs 已更新，snap 的触发时间 = 前面所有 action/rest 的累积终点
       if (item.type === 'snap') {
         if (elapsedMs >= accumulatedMs && !this.snapsPlayed.has(ti)) {
           this.snapsPlayed.add(ti);
-          console.log(`[Engine] 播放响指 @${accumulatedMs}ms ti=${ti}`);
           this.playSnap();
         }
-      }
-
-      if (item.type === 'action' || item.type === 'rest') {
-        accumulatedMs += item.duration;
       }
     }
   }
