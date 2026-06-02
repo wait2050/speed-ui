@@ -333,14 +333,14 @@ function insertSnaps(timeline: TimelineItem[], snapCounts: Record<string, number
   }
 
   // 插入打响指
+  console.log(`[Snap] phaseActions keys: ${[...phaseActions.keys()].join(', ')}`);
   const insertions: { idx: number; phase: string }[] = [];
 
   for (const [phase, count] of Object.entries(snapCounts)) {
-    if (phase === 'warmup' || count <= 0) continue; // 热身不插入
+    if (phase === 'warmup' || count <= 0) continue;
     const segments = phaseActions.get(phase);
-    if (!segments || segments.length === 0) continue;
+    if (!segments || segments.length === 0) { console.log(`[Snap] ${phase}: 无匹配阶段段`); continue; }
 
-    // 收集该阶段所有 action item 的索引和相对时间
     const actionItems: { idx: number; relMs: number }[] = [];
     for (const seg of segments) {
       let rel = seg.startMs;
@@ -355,14 +355,13 @@ function insertSnaps(timeline: TimelineItem[], snapCounts: Record<string, number
       }
     }
 
-    if (actionItems.length === 0) continue;
+    if (actionItems.length === 0) { console.log(`[Snap] ${phase}: 无动作项`); continue; }
 
-    // 均匀随机选点（带抖动）
     const totalActionMs = segments.reduce((s, seg) => s + (seg.endMs - seg.startMs), 0);
-    if (totalActionMs <= 0) continue;
+    console.log(`[Snap] ${phase}: ${actionItems.length}个动作, ${totalActionMs}ms, 要插入${count}个`);
+    if (totalActionMs <= 0) { console.log(`[Snap] ${phase}: totalActionMs=0`); continue; }
     for (let n = 0; n < count; n++) {
       const t = (totalActionMs / (count + 1)) * (n + 1) + (Math.random() - 0.5) * (totalActionMs / (count + 1)) * 0.5;
-      // 找到 t 落在哪个 action item 处
       let bestIdx = actionItems[actionItems.length - 1]?.idx;
       for (const ai of actionItems) {
         if (ai.relMs >= t) {
@@ -376,7 +375,8 @@ function insertSnaps(timeline: TimelineItem[], snapCounts: Record<string, number
     }
   }
 
-  // 从后往前插入，避免索引错乱
+  // 从后往前插入
+  console.log(`[Snap] 共${insertions.length}个插入点: ${insertions.map(i => `${i.phase}@${i.idx}`).join(', ')}`);
   insertions.sort((a, b) => b.idx - a.idx);
   for (const ins of insertions) {
     timeline.splice(ins.idx, 0, { type: 'snap', phase: ins.phase as any });
