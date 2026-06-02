@@ -108,10 +108,10 @@ export class PlaybackEngine {
     // 合成主观狂热微振风铃音
     this.excitementBuffer = synthesizeExcitementDing();
 
-    this.initialized = true;
-
     // 预加载语音 + 响指音频（全部 await 确保 ready 后再播放）
+    // 注意：initialized 必须放在 await 之后，避免 start() 在 snapBuffer/voices 还未就绪时跑
     await Promise.all([this.loadVoices(), this.loadSnap()]);
+    this.initialized = true;
   }
 
   /** 异步加载响指 MP3 */
@@ -142,14 +142,18 @@ export class PlaybackEngine {
    * 播放时只需一条 BufferSource 即可，时序由 AudioContext 高精度时钟驱动。
    */
   private buildSnapTrack(timeline: TimelineItem[]): AudioBuffer | null {
-    if (!this.ctx || !this.snapBuffer) return null;
+    if (!this.ctx) { console.warn('[SnapTrack] build: ctx 为空'); return null; }
+    if (!this.snapBuffer) { console.warn('[SnapTrack] build: snapBuffer 为空（可能 loadSnap 失败/未完成）'); return null; }
     const sr = this.ctx.sampleRate;
     let totalMs = 0;
+    let snapCount = 0;
     for (const item of timeline) {
       if (item.type === 'action' || item.type === 'rest') totalMs += item.duration;
+      if (item.type === 'snap') snapCount++;
     }
     // 加 2s 尾巴防止 snap 末尾被裁
     const totalSamples = Math.ceil((totalMs + 2000) * sr / 1000);
+    console.log(`[SnapTrack] build: snapBuffer=${this.snapBuffer.duration.toFixed(2)}s@${this.snapBuffer.sampleRate}Hz, snapCount=${snapCount}, totalMs=${totalMs}, totalSamples=${totalSamples} (${(totalSamples * 4 / 1024 / 1024).toFixed(1)}MB), ctxSR=${sr}`);
     const buffer = this.ctx.createBuffer(1, totalSamples, sr);
     const data = buffer.getChannelData(0);
 
@@ -160,7 +164,6 @@ export class PlaybackEngine {
       if (item.type === 'snap') {
         const startSample = Math.floor((accMs * sr) / 1000);
         const endSample = Math.min(startSample + snapLen, data.length);
-        // 简单叠加（不归一化，因为 snap 间隔通常足够远）
         for (let i = 0; i < endSample - startSample; i++) {
           data[startSample + i] = snapData[i];
         }
@@ -169,12 +172,28 @@ export class PlaybackEngine {
         accMs += item.duration;
       }
     }
+    // 校验：抽样检测前 3 个 snap 位置是否真的写入了非零数据
+    let accMs2 = 0;
+    let samplesChecked = 0;
+    let nonZeroFound = 0;
+    for (const item of timeline) {
+      if (item.type === 'snap' && samplesChecked < 3) {
+        const startSample = Math.floor((accMs2 * sr) / 1000);
+        const probe = data[startSample] ?? 0;
+        console.log(`[SnapTrack] build: snap#${samplesChecked + 1} at accMs=${accMs2} sample=${startSample} firstSample=${probe.toFixed(4)}`);
+        nonZeroFound += Math.abs(probe) > 0.001 ? 1 : 0;
+        samplesChecked++;
+      }
+      if (item.type === 'action' || item.type === 'rest') accMs2 += item.duration;
+    }
+    console.log(`[SnapTrack] build: ${nonZeroFound}/${samplesChecked} 抽样位置数据非零`);
     return buffer;
   }
 
   /** 启动响指音轨（从 snapTrackOffsetSec 处开始） */
   private startSnapTrack(): void {
-    if (!this.ctx || !this.snapTrackBuffer) return;
+    if (!this.ctx) { console.warn('[SnapTrack] start: ctx 为空'); return; }
+    if (!this.snapTrackBuffer) { console.warn('[SnapTrack] start: snapTrackBuffer 为空（build 可能未跑或失败）'); return; }
     // 若已存在先停掉
     this.stopSnapTrack();
     const src = this.ctx.createBufferSource();
@@ -188,6 +207,7 @@ export class PlaybackEngine {
     // clamp 偏移到 buffer 范围内
     const offset = Math.max(0, Math.min(this.snapTrackBuffer.duration, this.snapTrackOffsetSec));
     src.start(this.ctx.currentTime, offset);
+    console.log(`[SnapTrack] start: bufferDur=${this.snapTrackBuffer.duration.toFixed(2)}s, offset=${offset.toFixed(3)}s, ctxState=${this.ctx.state}, gain=${this.snapVolume}`);
   }
 
   /** 停止响指音轨，并把当前播放位置记到 snapTrackOffsetSec 供下次启动使用 */
@@ -260,6 +280,7 @@ export class PlaybackEngine {
     // 启动响指独立音轨（从 0 偏移开始）
     this.snapTrackBuffer = this.buildSnapTrack(timeline);
     this.snapTrackOffsetSec = 0;
+    console.log(`[SnapTrack] start入口: snapBuffer=${this.snapBuffer ? 'OK' : 'NULL'}, snapTrackBuffer=${this.snapTrackBuffer ? 'OK' : 'NULL'}, ctxState=${this.ctx.state}`);
     this.startSnapTrack();
 
     this.scheduleLoop();
