@@ -64,7 +64,7 @@ export class PlaybackEngine {
   private elapsedBeforePause = 0;
   private timerId: ReturnType<typeof setInterval> | null = null;
   private scheduledBeats = new Set<number>();
-  private snapsPlayed = new Set<number>(); // 已播放的响指位置（防止重复）
+  private _snapSeq = 0; // 响指递增序号，同位置多响指也能独立播放
   private lastVoiceKey = '';
   private voiceEndTime = 0;
 
@@ -156,7 +156,7 @@ export class PlaybackEngine {
     this.pausedAt = null;
     this.elapsedBeforePause = 0;
     this.scheduledBeats.clear();
-    this.snapsPlayed.clear();
+    this._snapSeq = 0;
     this.excitementPoints = [];
     this.lastVoiceKey = '';
     this.voiceEndTime = 0;
@@ -192,7 +192,7 @@ export class PlaybackEngine {
     const wasPaused = this.isPaused;
     if (this.timerId) { clearInterval(this.timerId); this.timerId = null; }
     this.scheduledBeats.clear();
-    this.snapsPlayed.clear();
+    this._snapSeq = 0;
     this.lastVoiceKey = '';
     this.voiceEndTime = 0;
     this.startTime = this.ctx.currentTime - targetMs / 1000;
@@ -302,12 +302,11 @@ export class PlaybackEngine {
         }
       }
 
-      // 打响指：经过时立即播放（每个位置只播一次）
+      // 打响指：经过时立即播放（用递增序号去重，同位置多响指不冲突）
       if (item.type === 'snap') {
-        const snapKey = Math.round(accumulatedMs);
-        if (elapsedMs >= accumulatedMs && !this.snapsPlayed.has(snapKey)) {
-          console.log(`[Engine] 播放响指 @${accumulatedMs}ms snapKey=${snapKey}`);
-          this.snapsPlayed.add(snapKey);
+        const seq = this._snapSeq++;
+        if (elapsedMs >= accumulatedMs) {
+          console.log(`[Engine] 播放响指 @${accumulatedMs}ms #${seq}`);
           this.playSnap();
         }
       }
