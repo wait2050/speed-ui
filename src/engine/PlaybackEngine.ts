@@ -274,14 +274,18 @@ export class PlaybackEngine {
       this.snapMasterGain.connect(this.ctx.destination);
     }
     const now = this.ctx.currentTime;
-    const startSec = now - fromMs / 1000; // 把 accMs 映射到绝对 ctx 时间
     const times = this.getPendingSnapTimes(fromMs);
     let scheduled = 0;
     for (const t of times) {
+      // 正确语义：snap 距离 fromMs 多久后播放 = (t - fromMs) ms
+      // schedule 时 ctx 时钟为 now，所以 absTime = now + (t - fromMs) / 1000
+      // 旧公式 startSec + (t-fromMs) = now - fromMs + (t-fromMs) 会在 t 接近 fromMs 时算到过去
+      // 触发"每次 seek 立刻响指"的 bug
+      const absTime = now + (t - fromMs) / 1000;
+      if (absTime < now) continue; // 防御性兜底（理论上 t>=fromMs 不会触发）
       const src = this.ctx.createBufferSource();
       src.buffer = this.snapBuffer;
       src.connect(this.snapMasterGain);
-      const absTime = Math.max(now, startSec + (t - fromMs) / 1000);
       try { src.start(absTime); } catch {}
       this.scheduledSnapSources.push(src);
       scheduled++;
