@@ -57,29 +57,6 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
-/**
- * 在空白 track（已有静音）上叠加 snap 样本。
- * 纯函数，便于测试。
- * @param trackData 目标 buffer 的 channel data（默认 0）
- * @param snapData  snap 样本
- * @param localSec snap 在 track 中的相对秒数
- * @param sr       采样率
- */
-export function placeSnapIntoTrack(
-  trackData: Float32Array,
-  snapData: Float32Array,
-  localSec: number,
-  sr: number
-): void {
-  if (localSec < 0) return;
-  const offsetSample = Math.floor(localSec * sr);
-  if (offsetSample >= trackData.length) return;
-  const end = Math.min(trackData.length, offsetSample + snapData.length);
-  for (let i = offsetSample; i < end; i++) {
-    trackData[i] += snapData[i - offsetSample];
-  }
-}
-
 export class PlaybackEngine {
   // ---- 公开状态（React 只读） ----
   isRunning = false;
@@ -91,9 +68,9 @@ export class PlaybackEngine {
   private beatBuffers = new Map<SoundType, AudioBuffer>();
   private signalBuffers = new Map<string, AudioBuffer>();
   private voiceBuffers = new Map<string, AudioBuffer>();
-  private snapBuffer: AudioBuffer | null = null;
+  private snapBuffer: AudioBuffer | null = null;       // snap 音源样本（~0.06s，来源：snap.mp3 或用户上传）
   private excitementBuffer: AudioBuffer | null = null;
-  private snapVolume = 1.0; // 0.0–1.0，可由外部设置
+  private snapVolume = 1.0;
   private initialized = false;
 
   private timeline: TimelineItem[] = [];
@@ -105,11 +82,14 @@ export class PlaybackEngine {
   private lastVoiceKey = '';
   private voiceEndTime = 0;
 
-  // ---- 响指轨道：单条拼接音轨（静音 + snap 嵌入）+ 单个 BufferSource 播：到底 ----
-  // 拼接轨长度 = 整条 timeline 总长（无上限，无滚动窗口）。内存换稳定性。
-  private snapMasterGain: GainNode | null = null;
-  private snapTrackBuffer: AudioBuffer | null = null;   // 拼接后的整条响指轨
-  private snapTrackSource: AudioBufferSourceNode | null = null;  // 唯一播放源
+  // ---- 响指：一整条拼接音轨 — 静音打底 + snap 样本嵌入 → 单个 BufferSource 播到底 ----
+  // 设计：一整条 AudioBuffer = timeline 全长。snap 样本直接复制到随机偏移。
+  // 播放：单个 AudioBufferSourceNode，start(0, offsetSec) 从任意位置起播。
+  // 暂停/恢复/seek：stop 旧源 → 从新偏移 start 新源。同一条 buffer 复用。
+  // 内存：20min × 44100Hz × 4B × 1ch ≈ 212MB（用户接受“内存换稳定性”）。
+  private snapTrackBuffer: AudioBuffer | null = null;          // 拼接后的整条响指轨
+  private snapTrackSource: AudioBufferSourceNode | null = null; // 唯一播放源
+  private snapGain: GainNode | null = null;                    // 响指音量节点
 
   // 响指配置：运行期由外部注入；启动时锁定 seed 保持 pause/resume 听感稳定
   private snapCounts: Record<Phase, number> = {
@@ -117,11 +97,6 @@ export class PlaybackEngine {
     climax: 0, afterglow: 0, cooldown: 0, landing: 0,
   };
   private snapSeed: number | null = null;
-
-  // 拼接轨采样率 = ctx 采样率（与 snapBuffer / voices 一致）
-  // 关键：buildSnapTrackBuffer 中用 this.ctx.sampleRate，不能写死成 22050
-  //   —— 否则会把 44100Hz 的 snap 拉伸成 1/2 速度 + 降 1 个八度
-  // 内存：20min × 44100Hz × 4B × 1ch ≈ 212MB，可接受
 
   private currentActionName = '';
   private currentPhase: Phase = 'warmup';
@@ -133,12 +108,10 @@ export class PlaybackEngine {
 
   // ---- 初始化 ----
 
-  /** 必须在用户手势中调用（移动端 AudioContext 限制） */
   async init(): Promise<void> {
     if (this.initialized) return;
     this.ctx = new AudioContext({ sampleRate: 44100 });
 
-    // 合成节拍音
     this.beatBuffers.set('tick', synthesizeTick());
     this.beatBuffers.set('woodblock', synthesizeWoodblock());
     this.beatBuffers.set('heartbeat', synthesizeHeartbeat());
@@ -146,145 +119,118 @@ export class PlaybackEngine {
     this.beatBuffers.set('fingertap', synthesizeFingertap());
     this.beatBuffers.set('bassdrum', synthesizeBassdrum());
 
-    // 合成信号音
     this.signalBuffers.set('single_ding', this.makeDing(1));
     this.signalBuffers.set('double_ding', this.makeDing(2));
     this.signalBuffers.set('heavy_beats', this.makeHeavyBeat());
 
-    // 合成主观狂热微振风铃音
     this.excitementBuffer = synthesizeExcitementDing();
 
-    // 预加载语音 + 响指音频（全部 await 确保 ready 后再播放）
-    // 注意：initialized 必须放在 await 之后，避免 start() 在 snapBuffer/voices 还未就绪时跑
     await Promise.all([this.loadVoices(), this.loadDefaultSnap()]);
     this.initialized = true;
   }
 
-  /** 加载默认 snap.mp3（仅 init 时使用） */
   private async loadDefaultSnap(): Promise<void> {
-    if (!this.ctx) { console.log('[Engine] loadDefaultSnap: ctx 为空'); return; }
+    if (!this.ctx) return;
     try {
-      const base = import.meta.env.BASE_URL || '/';
-      const url = `${base}snap.mp3`;
-      console.log(`[Engine] loadDefaultSnap: 加载 ${url}`);
+      const url = `${BASE}snap.mp3`;
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const arrayBuf = await resp.arrayBuffer();
-      console.log(`[Engine] loadDefaultSnap: 下载 ${arrayBuf.byteLength} 字节`);
-      this.snapBuffer = await this.ctx.decodeAudioData(arrayBuf);
-      console.log(`[Engine] loadDefaultSnap: 解码成功, ${this.snapBuffer.duration.toFixed(2)}s`);
+      this.snapBuffer = await this.ctx.decodeAudioData(await resp.arrayBuffer());
     } catch (e) {
-      console.warn('[Engine] loadDefaultSnap: 加载失败，回退合成', e);
+      console.warn('[Engine] snap.mp3 加载失败，使用合成回退', e);
       this.snapBuffer = this.makeSnap();
-      console.log(`[Engine] loadDefaultSnap: 合成回退 ${this.snapBuffer.duration.toFixed(2)}s`);
     }
   }
 
-  // ---- 响指拼接轨：单条 AudioBuffer 拼出整段响指 + 单个 BufferSource 播放 ----
+  // ================================================================
+  // 响指子系统：一整条拼接音轨 + 单个 BufferSource
+  // ================================================================
 
-  /**
-   * 由外部注入每阶段响指次数；触发 buffer 重建（下次 startSnapSource 用新 snap 时刻）。
-   * 正在播放的源需要外部手动 seek / restart 才会听到新配置（因为 timeline 不会自动重编）。
-   */
+  /** 外部注入每阶段响指次数（Home 页配置） */
   setSnapConfig(counts: Record<Phase, number>): void {
     this.snapCounts = { ...counts };
-    // 配置变化 → 让下次重建 buffer 时重新计算 snap 时刻
-    this.snapTrackBuffer = null;
+    this.snapTrackBuffer = null; // 强制下次重建
   }
 
-  /**
-   * 替换 snap 音源；null → 重新加载默认 snap.mp3；非 null → 直接替换。
-   * 替换后如果正在播放响指轨，立即用新源重建。
-   */
+  /** 替换 snap 音源；null → 回退默认 snap.mp3 */
   async setSnapSource(buffer: AudioBuffer | null): Promise<void> {
-    const hadTrack = !!this.snapTrackSource;
-    const savedElapsed = this.elapsed;
     if (buffer) {
       this.snapBuffer = buffer;
-      console.log(`[Engine] setSnapSource: 使用外部 buffer, ${buffer.duration.toFixed(2)}s`);
     } else {
       if (!this.ctx) return;
       try {
-        const base = import.meta.env.BASE_URL || '/';
-        const url = `${base}snap.mp3`;
-        const resp = await fetch(url);
+        const resp = await fetch(`${BASE}snap.mp3`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const arrayBuf = await resp.arrayBuffer();
-        this.snapBuffer = await this.ctx.decodeAudioData(arrayBuf);
-        console.log(`[Engine] setSnapSource(null): 回退默认 snap.mp3, ${this.snapBuffer.duration.toFixed(2)}s`);
+        this.snapBuffer = await this.ctx.decodeAudioData(await resp.arrayBuffer());
       } catch (e) {
-        console.warn('[Engine] setSnapSource(null): 默认加载失败, 保持当前 buffer');
+        console.warn('[Engine] setSnapSource(null) 失败，保持当前', e);
         return;
       }
     }
-    // 换源后重建拼接轨（用新源）；保留 elapsed 位置
-    if (hadTrack) {
-      this.snapTrackBuffer = null; // 强制重建（用新 snapBuffer）
-      this.startSnapSource(savedElapsed);
-    }
-  }
-
-  /**
-   * 直接从 ArrayBuffer 解码并设为 snap 音源（用于用户上传文件）
-   * - 解码新 buffer
-   * - 如果当前正在播放响指轨，立即用新源重建（保持 elapsed 位置）
-   */
-  async setSnapSourceFromArrayBuffer(arrayBuf: ArrayBuffer): Promise<void> {
-    if (!this.ctx) return;
-    this.snapBuffer = await this.ctx.decodeAudioData(arrayBuf);
-    console.log(`[Engine] setSnapSourceFromArrayBuffer: 解码成功, ${this.snapBuffer.duration.toFixed(2)}s`);
-    // 重建拼接轨（用新源）；保留 elapsed 位置
+    // 换源 → 重建拼接轨 → 如果正在播放则从当前位置重启
+    this.snapTrackBuffer = null;
     if (this.snapTrackSource) {
-      this.snapTrackBuffer = null; // 强制重建
       this.startSnapSource(this.elapsed);
     }
   }
 
-  /**
-   * 扫描 timeline，根据 snapCounts + snapSeed 随机生成 fromMs 之后的响指绝对毫秒列表。
-   * 同一 timeline + 同一 counts + 同一 seed → 输出确定。
-   */
+  /** 从 ArrayBuffer 解码用户上传文件并设为 snap 音源 */
+  async setSnapSourceFromArrayBuffer(arrayBuf: ArrayBuffer): Promise<void> {
+    if (!this.ctx) return;
+    this.snapBuffer = await this.ctx.decodeAudioData(arrayBuf);
+    this.snapTrackBuffer = null;
+    if (this.snapTrackSource) {
+      this.startSnapSource(this.elapsed);
+    }
+  }
+
+  /** 设置响指音量 (0.0–1.0) */
+  setSnapVolume(v: number): void {
+    this.snapVolume = Math.max(0, Math.min(1, v));
+    if (this.snapGain) {
+      this.snapGain.gain.value = this.snapVolume;
+    }
+  }
+
+  // ---- 内部：时刻生成 ----
+
+  /** 扫描 timeline，按 snapCounts 在每阶段内随机分桶生成绝对毫秒时刻列表 */
   private generateSnapTimes(): number[] {
     if (this.snapSeed === null) {
       this.snapSeed = (Date.now() & 0xffffffff) >>> 0;
     }
     const rng = mulberry32(this.snapSeed);
 
-    // 累计每个 phase 的 action+rest 总时长（绝对毫秒）
-    const phaseDurations: Map<Phase, { startMs: number; endMs: number }> = new Map();
+    // 扫描 timeline 得到每 phase 的 (startMs, endMs)
+    const segs = new Map<Phase, { startMs: number; endMs: number }>();
     let accMs = 0;
-    let curPhase: Phase | null = null;
+    let cur: Phase | null = null;
     let segStart = 0;
     for (const item of this.timeline) {
       if (item.type === 'end') break;
-      const dur = item.type === 'action' || item.type === 'rest' ? item.duration : 0;
-      const ph: Phase | undefined = (item.type === 'action' || item.type === 'rest') ? item.phase : undefined;
-      if (ph && ph !== curPhase) {
-        if (curPhase !== null) {
-          phaseDurations.set(curPhase, { startMs: segStart, endMs: accMs });
-        }
-        curPhase = ph;
+      const dur = (item.type === 'action' || item.type === 'rest') ? item.duration : 0;
+      const ph: Phase | undefined =
+        (item.type === 'action' || item.type === 'rest') ? item.phase : undefined;
+      if (ph && ph !== cur) {
+        if (cur !== null) segs.set(cur, { startMs: segStart, endMs: accMs });
+        cur = ph;
         segStart = accMs;
       }
       accMs += dur;
     }
-    if (curPhase !== null) {
-      phaseDurations.set(curPhase, { startMs: segStart, endMs: accMs });
-    }
+    if (cur !== null) segs.set(cur, { startMs: segStart, endMs: accMs });
 
     const times: number[] = [];
-    for (const phaseStr of Object.keys(this.snapCounts) as Phase[]) {
-      const count = this.snapCounts[phaseStr];
-      if (count <= 0) continue;
-      if (phaseStr === 'warmup') continue; // 热身阶段不响应
-      const seg = phaseDurations.get(phaseStr);
+    for (const [phase, count] of Object.entries(this.snapCounts) as [Phase, number][]) {
+      if (phase === 'warmup' || count <= 0) continue;
+      const seg = segs.get(phase);
       if (!seg) continue;
       const totalMs = seg.endMs - seg.startMs;
       if (totalMs <= 0) continue;
       const bucket = totalMs / (count + 1);
       for (let k = 1; k <= count; k++) {
         const center = bucket * k;
-        const jitter = (rng() - 0.5) * bucket * 0.5;
+        const jitter = (rng() - 0.5) * bucket * 0.5; // ±25% 桶宽
         times.push(seg.startMs + center + jitter);
       }
     }
@@ -292,29 +238,29 @@ export class PlaybackEngine {
     return times;
   }
 
-  /** 计算整条 timeline 的总毫秒（用 action+rest duration 累加） */
-  private computeTimelineTotalMs(): number {
-    let total = 0;
+  /** 计算 timeline 总毫秒（仅 action + rest） */
+  private timelineTotalMs(): number {
+    let t = 0;
     for (const item of this.timeline) {
       if (item.type === 'end') break;
-      if (item.type === 'action' || item.type === 'rest') total += item.duration;
+      if (item.type === 'action' || item.type === 'rest') t += item.duration;
     }
-    return total;
+    return t;
   }
 
+  // ---- 内部：拼接轨构建 ----
+
   /**
-   * 构建一条拼好的整条响指音轨：静音打底，把 snap 样本复制到指定偏移。
-   * - 长度 = 整条 timeline 总长（无上限，内存换稳定性）
-   * - 采样率 = ctx 采样率（与 snapBuffer 一致，音高不变）
+   * 构建一整条响指拼接轨：全静音 AudioBuffer，在 snap 时刻嵌入 snap 样本。
+   * - 长度 = timeline 总长（sample-accurate）
+   * - 采样率 = ctx.sampleRate（与 snapBuffer 一致，保证音高不变）
    * - 1 通道 mono
-   * - AudioBuffer 初始全 0 = 静音底版
-   *
-   * 内存估算：20min × 44100Hz × 4B × 1ch ≈ 212MB。可接受。
+   * - 所有样本直接相加（支持多个 snap 重叠）
    */
-  private buildSnapTrackBuffer(): AudioBuffer | null {
+  private buildSnapTrack(): AudioBuffer | null {
     if (!this.ctx || !this.snapBuffer) return null;
     const sr = this.ctx.sampleRate;
-    const totalMs = this.computeTimelineTotalMs();
+    const totalMs = this.timelineTotalMs();
     const totalSamples = Math.max(1, Math.ceil(totalMs / 1000 * sr));
     const track = this.ctx.createBuffer(1, totalSamples, sr);
     const data = track.getChannelData(0);
@@ -322,54 +268,55 @@ export class PlaybackEngine {
     const times = this.generateSnapTimes();
     const snapData = this.snapBuffer.getChannelData(0);
     let placed = 0;
-    for (const t of times) {
-      if (t >= totalMs) continue; // 超出 timeline 范围的不嵌（防御性）
-      const offsetSample = Math.floor(t / 1000 * sr);
-      if (offsetSample >= totalSamples) continue;
-      const end = Math.min(totalSamples, offsetSample + snapData.length);
-      for (let i = offsetSample; i < end; i++) {
-        data[i] += snapData[i - offsetSample];
+    for (const tMs of times) {
+      if (tMs >= totalMs) continue;
+      const off = Math.floor(tMs / 1000 * sr);
+      if (off >= totalSamples) continue;
+      const end = Math.min(totalSamples, off + snapData.length);
+      for (let i = off; i < end; i++) {
+        data[i] += snapData[i - off];
       }
       placed++;
     }
-    console.log(`[Snap] 拼接轨已生成: 长度=${(totalMs/1000).toFixed(1)}s, snap=${placed}, sampleRate=${sr}`);
+    console.log(`[Snap] 拼接轨: ${(totalMs / 1000).toFixed(1)}s, ${placed} snap, ${sr}Hz, ${(totalSamples * 4 / 1024 / 1024).toFixed(1)}MB`);
     return track;
   }
 
+  // ---- 内部：播放控制 ----
+
   /**
-   * 启动或重启响指轨 source：从 offsetMs 位置开始
-   * - 停掉旧 source
-   * - 复用/重建 buffer
-   * - 单个 BufferSource.start(0, offsetSec)，ctx 内部 sample-accurate
-   * - 关键不变量：offsetSec ∈ [0, buffer.duration)，Web Audio 物理上不可能"在过去时间播放"
-   * - 如果 offsetMs >= buffer.duration（已超 timeline 末尾），不启动 source（用户听不见响指）
+   * 从 offsetMs 启动响指轨：
+   * - 停掉旧源
+   * - 必要时（重新）构建拼接轨
+   * - 创建新的 BufferSource，start(0, offsetSec)
    */
   private startSnapSource(offsetMs: number): void {
     if (!this.ctx || !this.snapBuffer) return;
     if (!this.snapTrackBuffer) {
-      this.snapTrackBuffer = this.buildSnapTrackBuffer();
+      this.snapTrackBuffer = this.buildSnapTrack();
     }
     if (!this.snapTrackBuffer) return;
 
-    // offsetSec 必须 < buffer.duration，否则 start() 抛 InvalidStateError
-    const bufferDurSec = this.snapTrackBuffer.duration;
-    const offsetSec = Math.max(0, Math.min(offsetMs / 1000, bufferDurSec - 0.001));
-
     this.stopSnapSource();
-    if (!this.snapMasterGain) {
-      this.snapMasterGain = this.ctx.createGain();
-      this.snapMasterGain.gain.value = this.snapVolume;
-      this.snapMasterGain.connect(this.ctx.destination);
+
+    // 确保 GainNode 存在并连接到 destination
+    if (!this.snapGain) {
+      this.snapGain = this.ctx.createGain();
+      this.snapGain.gain.value = this.snapVolume;
+      this.snapGain.connect(this.ctx.destination);
     }
+
+    const bufDur = this.snapTrackBuffer.duration;
+    const offsetSec = Math.max(0, Math.min(offsetMs / 1000, bufDur - 0.001));
 
     const src = this.ctx.createBufferSource();
     src.buffer = this.snapTrackBuffer;
-    src.connect(this.snapMasterGain);
+    src.connect(this.snapGain);
     try { src.start(0, offsetSec); } catch {}
     this.snapTrackSource = src;
   }
 
-  /** 停掉响指轨 source（保 buffer；resume 时从 elapsedBeforePause 重启） */
+  /** 停掉当前响指源（保留拼接轨 buffer，恢复/seek 时复用） */
   private stopSnapSource(): void {
     if (this.snapTrackSource) {
       try { this.snapTrackSource.stop(); } catch {}
@@ -378,34 +325,23 @@ export class PlaybackEngine {
     }
   }
 
-  /** 释放全部响指资源（destroy 时） */
-  private disposeSnapTrack(): void {
+  /** 销毁全部响指资源 */
+  private disposeSnap(): void {
     this.stopSnapSource();
     this.snapTrackBuffer = null;
-    this.snapMasterGain = null;
+    if (this.snapGain) {
+      try { this.snapGain.disconnect(); } catch {}
+      this.snapGain = null;
+    }
   }
 
-  /** 旧名 alias（pause/seek/stop/destroy 处可能用到） */
-  private clearSnapSources(): void {
-    this.stopSnapSource();
-  }
+  // ================================================================
+  // 播放控制
+  // ================================================================
 
-  /** 注册 UI 更新回调 */
-  setOnUpdate(cb: EngineUpdateCallback): void {
-    this.onUpdate = cb;
-  }
-
-  /** 注册播放结束回调 */
-  setOnFinished(cb: () => void): void {
-    this.onFinished = cb;
-  }
-
-  /** 注册节拍回调（每次 beat 时触发） */
-  setOnBeat(cb: () => void): void {
-    this.onBeatCallback = cb;
-  }
-
-  // ---- 播放控制 ----
+  setOnUpdate(cb: EngineUpdateCallback): void { this.onUpdate = cb; }
+  setOnFinished(cb: () => void): void { this.onFinished = cb; }
+  setOnBeat(cb: () => void): void { this.onBeatCallback = cb; }
 
   start(timeline: TimelineItem[]): void {
     if (!this.ctx || !this.initialized) return;
@@ -422,11 +358,10 @@ export class PlaybackEngine {
     this.lastVoiceKey = '';
     this.voiceEndTime = 0;
     this.startTime = this.ctx.currentTime;
-    // 启动时锁定一次 seed（之后 pause/resume/seek 复用），保证听感稳定
     this.snapSeed = (Date.now() & 0xffffffff) >>> 0;
 
-    // 启动响指拼接轨：单轨一条，从 0 开始，自动播到底
-    this.snapTrackBuffer = null; // 强制重建（start 期间不重用）
+    // 启动一整条响指轨：从 0 开始，播到底
+    this.snapTrackBuffer = null; // 强制重建
     this.startSnapSource(0);
 
     this.scheduleLoop();
@@ -441,8 +376,7 @@ export class PlaybackEngine {
     this.pausedAt = this.ctx.currentTime;
     this.elapsedBeforePause = this.pausedAt - this.startTime;
     if (this.timerId) { clearInterval(this.timerId); this.timerId = null; }
-    // 暂停时停掉响指轨（恢复时从 elapsedBeforePause 重启）
-    this.clearSnapSources();
+    this.stopSnapSource(); // 停响指轨（buffer 保留）
     this.emitUpdate();
   }
 
@@ -451,7 +385,7 @@ export class PlaybackEngine {
     this.isPaused = false;
     this.startTime = this.ctx.currentTime - this.elapsedBeforePause;
     this.pausedAt = null;
-    // 恢复：单轨 source 从 elapsedBeforePause 位置继续
+    // 从暂停位置重启响指轨（同一 buffer，新 offset）
     this.startSnapSource(this.elapsedBeforePause * 1000);
     this.scheduleLoop();
     this.timerId = setInterval(() => this.scheduleLoop(), SCHEDULE_INTERVAL_MS);
@@ -470,13 +404,11 @@ export class PlaybackEngine {
     this.pausedAt = null;
     this.isPaused = false;
     this.isRunning = true;
-    // seek：单轨 source 从 targetMs 位置继续（buffer 复用；不会"立刻响指"）
+    // 从目标位置重启响指轨
     this.startSnapSource(targetMs);
     this.scheduleLoop();
     this.timerId = setInterval(() => this.scheduleLoop(), SCHEDULE_INTERVAL_MS);
-    if (wasPaused) {
-      this.pause();
-    }
+    if (wasPaused) this.pause();
   }
 
   stop(): void {
@@ -484,18 +416,17 @@ export class PlaybackEngine {
     this.isPaused = false;
     if (this.timerId) { clearInterval(this.timerId); this.timerId = null; }
     this.scheduledBeats.clear();
-    this.clearSnapSources();
+    this.stopSnapSource();
   }
 
   destroy(): void {
     this.stop();
-    this.disposeSnapTrack();
+    this.disposeSnap();
     this.teardownMediaSession();
     if (this.ctx) { this.ctx.close(); this.ctx = null; }
     this.beatBuffers.clear();
     this.signalBuffers.clear();
     this.voiceBuffers.clear();
-    this.snapMasterGain = null;
     this.snapBuffer = null;
     this.initialized = false;
   }
@@ -507,7 +438,9 @@ export class PlaybackEngine {
     return (this.ctx.currentTime - this.startTime) * 1000;
   }
 
-  // ---- 调度循环 ----
+  // ================================================================
+  // 调度循环（节拍 / 语音 / 信号 — 不碰响指轨）
+  // ================================================================
 
   private scheduleLoop(): void {
     if (!this.isRunning || this.isPaused || !this.ctx) return;
@@ -515,8 +448,8 @@ export class PlaybackEngine {
     const elapsedMs = (now - this.startTime) * 1000;
     this.totalElapsedMs = elapsedMs;
 
-    // 响指轨：单条 source 自动播到底，无需在 scheduleLoop 续接
-    // （如果 elapsed 已超轨长，源已自然结束，不会有任何 snap）
+    // 响指轨：单条 source 自动连续播放，无需 scheduleLoop 干预
+    // （source 已通过 start(0, offsetSec) 起播，ctx 内部 sample-accurate）
 
     let accumulatedMs = 0;
     let foundCurrent = false;
@@ -528,9 +461,7 @@ export class PlaybackEngine {
           this.isRunning = false;
           if (this.timerId) { clearInterval(this.timerId); this.timerId = null; }
           this.emitUpdate();
-          if (this.onFinished) {
-            this.onFinished();
-          }
+          this.onFinished?.();
         }
         return;
       }
@@ -546,42 +477,31 @@ export class PlaybackEngine {
           this.currentActionName = item.name;
           this.currentPhase = item.phase;
           this.currentBpm = item.bpm;
-
-          // 语音
-          const voiceKey = `a_${accumulatedMs}`;
-          if (voiceKey !== this.lastVoiceKey) {
-            this.lastVoiceKey = voiceKey;
-            const vdur = this.playVoice(item.name);
-            this.voiceEndTime = now + vdur;
+          const vk = `a_${accumulatedMs}`;
+          if (vk !== this.lastVoiceKey) {
+            this.lastVoiceKey = vk;
+            this.voiceEndTime = now + this.playVoice(item.name);
           }
         } else if (item.type === 'rest') {
           this.currentActionName = '休息中';
-
-          const voiceKey = `r_${accumulatedMs}`;
-          if (voiceKey !== this.lastVoiceKey) {
-            this.lastVoiceKey = voiceKey;
-            const vdur = this.playVoice('休息中');
-            this.voiceEndTime = now + vdur;
+          const vk = `r_${accumulatedMs}`;
+          if (vk !== this.lastVoiceKey) {
+            this.lastVoiceKey = vk;
+            this.voiceEndTime = now + this.playVoice('休息中');
           }
         }
-
-        // 推送给 React
         this.emitUpdateWith(remainingMs);
       }
 
-      // 安排节拍
       if (item.type === 'action' && itemEnd > elapsedMs) {
         this.scheduleBeats(item, accumulatedMs, itemEnd);
       }
-
-      // 安排信号
       if (item.type === 'transition') {
-        const signalTime = this.startTime + accumulatedMs / 1000;
-        if (signalTime > now && signalTime < now + LOOK_AHEAD_MS / 1000) {
-          this.playSignal(item.signal, signalTime);
+        const sigTime = this.startTime + accumulatedMs / 1000;
+        if (sigTime > now && sigTime < now + LOOK_AHEAD_MS / 1000) {
+          this.playSignal(item.signal, sigTime);
         }
       }
-
       if (item.type === 'action' || item.type === 'rest') {
         accumulatedMs += item.duration;
       }
@@ -601,13 +521,9 @@ export class PlaybackEngine {
 
     for (let t = offsetMs; t < endMs; t += intervalMs) {
       let actualInterval = intervalMs;
-      if (t >= boostStart) {
-        actualInterval = 60000 / (bpm + BPM_BOOST_AMOUNT);
-      }
+      if (t >= boostStart) actualInterval = 60000 / (bpm + BPM_BOOST_AMOUNT);
 
       const absTime = this.startTime + t / 1000;
-
-      // 语音期间不排节拍
       if (absTime < this.voiceEndTime) {
         if (t >= boostStart) t += actualInterval - intervalMs;
         continue;
@@ -620,7 +536,6 @@ export class PlaybackEngine {
           this.playBeat(item.sound, absTime, item.volume);
         }
       }
-
       if (t >= boostStart) t += actualInterval - intervalMs;
     }
   }
@@ -637,7 +552,6 @@ export class PlaybackEngine {
     gain.gain.value = volume;
     src.connect(gain).connect(this.ctx.destination);
     src.start(when);
-    // 触发节拍回调（用于视觉同步）
     this.onBeatCallback?.();
   }
 
@@ -674,21 +588,18 @@ export class PlaybackEngine {
           const url = `${BASE}voices/${encodeURIComponent(VOICE_MAP[name])}`;
           const resp = await fetch(url);
           if (!resp.ok) return;
-          const buf = await resp.arrayBuffer();
-          const audioBuf = await this.ctx!.decodeAudioData(buf);
-          this.voiceBuffers.set(name, audioBuf);
+          this.voiceBuffers.set(name, await this.ctx!.decodeAudioData(await resp.arrayBuffer()));
         } catch { /* skip */ }
       })
     );
   }
 
-  // ---- 通知 React ----
+  // ---- React 通知 ----
 
-  private emitUpdateWith(actionRemainingMs: number): void {
-    if (!this.onUpdate) return;
-    this.onUpdate({
+  private emitUpdateWith(remMs: number): void {
+    this.onUpdate?.({
       actionName: this.currentActionName,
-      actionRemainingMs,
+      actionRemainingMs: remMs,
       totalElapsedMs: this.totalElapsedMs,
       phase: this.currentPhase,
       isPaused: this.isPaused,
@@ -696,8 +607,7 @@ export class PlaybackEngine {
   }
 
   private emitUpdate(): void {
-    if (!this.onUpdate) return;
-    this.onUpdate({
+    this.onUpdate?.({
       actionName: this.currentActionName || '准备中',
       actionRemainingMs: 0,
       totalElapsedMs: this.totalElapsedMs,
@@ -747,7 +657,6 @@ export class PlaybackEngine {
     return buf;
   }
 
-  /** 合成响指回退（仅当 snap.mp3 加载失败时使用） */
   private makeSnap(): AudioBuffer {
     const sr = 44100;
     const len = Math.ceil(0.06 * sr);
@@ -760,15 +669,8 @@ export class PlaybackEngine {
     return buf;
   }
 
-  /** 设置响指音量 (0.0–1.0) */
-  setSnapVolume(v: number): void {
-    this.snapVolume = Math.max(0, Math.min(1, v));
-    if (this.snapMasterGain) {
-      this.snapMasterGain.gain.value = this.snapVolume;
-    }
-  }
+  // ---- 打点 / 高潮 / 余韵 ----
 
-  /** 播放主观打点风铃音 */
   playExcitementDing(): void {
     if (!this.ctx || !this.excitementBuffer) return;
     const src = this.ctx.createBufferSource();
@@ -779,188 +681,95 @@ export class PlaybackEngine {
     src.start(this.ctx.currentTime);
   }
 
-  /** 盲操打点收集器：播放微振风铃音并返回当前耗时，同时录入完整打点上下文 */
   recordExcitement(actionName: string): number {
     this.playExcitementDing();
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate([20, 40, 20]);
     }
     this.excitementPoints.push({
-      elapsedMs: this.totalElapsedMs,
-      actionName,
-      phase: this.currentPhase,
-      bpm: this.currentBpm || 60,
+      elapsedMs: this.totalElapsedMs, actionName,
+      phase: this.currentPhase, bpm: this.currentBpm || 60,
     });
     return this.totalElapsedMs;
   }
 
-  /** 获取本次播放所有实录打点数据 */
-  getExcitementPoints(): ExcitementPoint[] {
-    return [...this.excitementPoints];
-  }
-
-  /** 获取最近一次打点的完整信息（供 UI 即时推送到 Zustand） */
+  getExcitementPoints(): ExcitementPoint[] { return [...this.excitementPoints]; }
   getLastExcitementPoint(): ExcitementPoint | null {
     if (this.excitementPoints.length === 0) return null;
     return { ...this.excitementPoints[this.excitementPoints.length - 1] };
   }
 
-  /** 跃迁动态 timeline 重构：保留当前动作的已进行时长，截断后续，并追加冲刺高潮 */
   triggerSubjectiveClimax(actionName: string): void {
     if (!this.ctx || !this.isRunning) return;
     const elapsedMs = this.totalElapsedMs;
-    this.scheduledBeats.clear(); // 清空旧的节拍
-    this.lastVoiceKey = ''; // 允许重新播放动作提示
+    this.scheduledBeats.clear();
+    this.lastVoiceKey = '';
 
-    // 1. 保留当前时间点前的所有timeline内容，并精确截断当前正在进行的动作
-    let accumulatedMs = 0;
-    const newTimeline: TimelineItem[] = [];
-
+    let acc = 0;
+    const tl: TimelineItem[] = [];
     for (const item of this.timeline) {
       if (item.type === 'end') break;
       const dur = item.type === 'action' || item.type === 'rest' ? item.duration : 0;
-      if (accumulatedMs + dur <= elapsedMs) {
-        newTimeline.push(item);
-        accumulatedMs += dur;
-      } else {
-        // 方案 A（精确截断保留）：落入当前区间的动作项目，计算已进行的时长
-        if ((item.type === 'action' || item.type === 'rest') && elapsedMs > accumulatedMs) {
-          const elapsedInItem = elapsedMs - accumulatedMs;
-          if (elapsedInItem > 0) {
-            newTimeline.push({
-              ...item,
-              duration: elapsedInItem
-            } as TimelineItem);
-            accumulatedMs += elapsedInItem;
-          }
+      if (acc + dur <= elapsedMs) { tl.push(item); acc += dur; }
+      else {
+        if ((item.type === 'action' || item.type === 'rest') && elapsedMs > acc) {
+          const rem = elapsedMs - acc;
+          if (rem > 0) { tl.push({ ...item, duration: rem } as TimelineItem); acc += rem; }
         }
-        break; // 掐断后续
+        break;
       }
     }
+    tl.push({ type: 'transition', signal: 'heavy_beats', phase: 'climax' });
+    tl.push({ type: 'action', name: actionName, duration: 43200000, bpm: 135, sound: 'bassdrum', volume: 1.0, phase: 'climax' });
+    tl.push({ type: 'end' });
+    this.timeline = tl;
 
-    // 2. 插入重鼓过渡音
-    newTimeline.push({
-      type: 'transition',
-      signal: 'heavy_beats',
-      phase: 'climax'
-    });
-
-    // 3. 动态追加无限高潮刺激（12小时 43,200,000 ms）
-    newTimeline.push({
-      type: 'action',
-      name: actionName,
-      duration: 43200000,
-      bpm: 135,
-      sound: 'bassdrum',
-      volume: 1.0,
-      phase: 'climax'
-    });
-
-    newTimeline.push({ type: 'end' });
-    this.timeline = newTimeline;
-
-    // 重建响指拼接轨以匹配新 timeline，并保持当前播放位置
-    this.snapTrackBuffer = null; // 强制重建（新 timeline → 新 snap 时刻）
+    // 重建一整条响指轨（新 timeline）+ 从当前位置重启
+    this.snapTrackBuffer = null;
     this.startSnapSource(this.elapsed);
 
-    // 震动保护
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate([100, 50, 100]);
-    }
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([100, 50, 100]);
   }
 
-  /** 动态释放进入终局：保留当前动作已进行时长，截弯取直流畅拼装冷静冷静冷静冷静终局三部曲 */
   triggerReleaseAfterglow(afterglowActionName: string): void {
     if (!this.ctx || !this.isRunning) return;
     const elapsedMs = this.totalElapsedMs;
     this.scheduledBeats.clear();
     this.lastVoiceKey = '';
 
-    // 1. 保留当前时间点前的timeline内容并精确截断当前正在进行的无限高潮动作
-    let accumulatedMs = 0;
-    const newTimeline: TimelineItem[] = [];
-
+    let acc = 0;
+    const tl: TimelineItem[] = [];
     for (const item of this.timeline) {
       if (item.type === 'end') break;
       const dur = item.type === 'action' || item.type === 'rest' ? item.duration : 0;
-      if (accumulatedMs + dur <= elapsedMs) {
-        newTimeline.push(item);
-        accumulatedMs += dur;
-      } else {
-        // 对于当前正在经历的高潮动作进行强行截断，保留之前跑过的时间
-        if ((item.type === 'action' || item.type === 'rest') && elapsedMs > accumulatedMs) {
-          const elapsedInItem = elapsedMs - accumulatedMs;
-          if (elapsedInItem > 0) {
-            newTimeline.push({
-              ...item,
-              duration: elapsedInItem
-            } as TimelineItem);
-            accumulatedMs += elapsedInItem;
-          }
+      if (acc + dur <= elapsedMs) { tl.push(item); acc += dur; }
+      else {
+        if ((item.type === 'action' || item.type === 'rest') && elapsedMs > acc) {
+          const rem = elapsedMs - acc;
+          if (rem > 0) { tl.push({ ...item, duration: rem } as TimelineItem); acc += rem; }
         }
         break;
       }
     }
+    tl.push({ type: 'action', name: afterglowActionName, duration: 60000, bpm: 120, sound: 'heartbeat', volume: 0.9, phase: 'afterglow' });
+    tl.push({ type: 'action', name: '收尾缓冲', duration: 15000, bpm: 20, sound: 'tick', volume: 0.7, phase: 'cooldown' });
+    tl.push({ type: 'action', name: '静默着陆中', duration: 30000, bpm: 1, sound: 'fingertap', volume: 0, phase: 'landing' });
+    tl.push({ type: 'end' });
+    this.timeline = tl;
 
-    // 2. 无缝追加终局三部曲：余韵 1分钟 + 收尾 15秒 + 着陆 30秒
-    // 2.1 余韵
-    newTimeline.push({
-      type: 'action',
-      name: afterglowActionName,
-      duration: 60 * 1000,
-      bpm: 120,
-      sound: 'heartbeat',
-      volume: 0.9,
-      phase: 'afterglow'
-    });
-
-    // 2.2 收尾
-    newTimeline.push({
-      type: 'action',
-      name: '收尾缓冲',
-      duration: 15 * 1000,
-      bpm: 20, // 3秒一个单拍
-      sound: 'tick',
-      volume: 0.7,
-      phase: 'cooldown'
-    });
-
-    // 2.3 静静着陆标记 (静音着陆30秒)
-    newTimeline.push({
-      type: 'action',
-      name: '静默着陆中',
-      duration: 30 * 1000,
-      bpm: 1, // 不打节拍
-      sound: 'fingertap',
-      volume: 0,
-      phase: 'landing'
-    });
-
-    newTimeline.push({ type: 'end' });
-    this.timeline = newTimeline;
-
-    // 重建响指拼接轨以匹配新 timeline，并保持当前播放位置
-    this.snapTrackBuffer = null; // 强制重建（新 timeline → 新 snap 时刻）
+    this.snapTrackBuffer = null;
     this.startSnapSource(this.elapsed);
 
-    // 震动保护
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate([40, 200]);
-    }
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([40, 200]);
   }
 
-  // ---- Media Session API 后台保活 ----
+  // ---- Media Session ----
 
-  /** 注册 Media Session，声明正在播放音频以保活后台线程 */
   private setupMediaSession(): void {
     if (!('mediaSession' in navigator)) return;
-
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: '节奏按摩引导器',
-      artist: 'Rhythm Guide',
-      album: 'Session',
+      title: '节奏按摩引导器', artist: 'Rhythm Guide', album: 'Session',
     });
-
     navigator.mediaSession.setActionHandler('play', () => this.resume());
     navigator.mediaSession.setActionHandler('pause', () => this.pause());
     navigator.mediaSession.playbackState = 'playing';
