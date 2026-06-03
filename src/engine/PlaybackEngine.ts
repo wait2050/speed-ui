@@ -105,13 +105,11 @@ export class PlaybackEngine {
   private lastVoiceKey = '';
   private voiceEndTime = 0;
 
-  // ---- 响指轨道：单条拼接音轨（静音 + snap 嵌入） + 单个 BufferSource ----
-  // 避免预渲染整条 16+min 音轨占 168MB 内存，同时彻底消除多源调度时 seek 触发的 bug
+  // ---- 响指轨道：单条拼接音轨（静音 + snap 嵌入）+ 单个 BufferSource 播：到底 ----
+  // 拼接轨长度 = 整条 timeline 总长（无上限，无滚动窗口）。内存换稳定性。
   private snapMasterGain: GainNode | null = null;
-  private snapTrackSource: AudioBufferSourceNode | null = null;
   private snapTrackBuffer: AudioBuffer | null = null;   // 拼接后的整条响指轨
-  private snapTrackBufferStartSec: number = 0;         // 整条轨起始 ctx 时间
-  private snapTrackBufferDurationSec: number = 0;      // 整条轨长度
+  private snapTrackSource: AudioBufferSourceNode | null = null;  // 唯一播放源
 
   // 响指配置：运行期由外部注入；启动时锁定 seed 保持 pause/resume 听感稳定
   private snapCounts: Record<Phase, number> = {
@@ -119,16 +117,11 @@ export class PlaybackEngine {
     climax: 0, afterglow: 0, cooldown: 0, landing: 0,
   };
   private snapSeed: number | null = null;
-  private cachedSnapTimes: number[] | null = null;
 
   // 拼接轨采样率 = ctx 采样率（与 snapBuffer / voices 一致）
-  // 关键：buildSnapTrack 中用 this.ctx.sampleRate，不能写死成 22050
+  // 关键：buildSnapTrackBuffer 中用 this.ctx.sampleRate，不能写死成 22050
   //   —— 否则会把 44100Hz 的 snap 拉伸成 1/2 速度 + 降 1 个八度
-  // 内存：5min × 44100Hz × 4B × 1ch ≈ 52.9MB，可接受
-  // 拼接轨最大长度（秒）。超过此长度的 timeline 只在开头生成 snap
-  private static readonly SNAP_TRACK_MAX_SEC = 60 * 60; // 1h
-  // 拼接轨覆盖窗口（秒）：trigger* 重建时只覆盖未来这么多
-  private static readonly SNAP_TRACK_WINDOW_SEC = 5 * 60; // 5min
+  // 内存：20min × 44100Hz × 4B × 1ch ≈ 212MB，可接受
 
   private currentActionName = '';
   private currentPhase: Phase = 'warmup';
@@ -190,13 +183,13 @@ export class PlaybackEngine {
   // ---- 响指拼接轨：单条 AudioBuffer 拼出整段响指 + 单个 BufferSource 播放 ----
 
   /**
-   * 由外部注入每阶段响指次数；下次 playSnapTrackFrom 生效。
-   * 正在播放的轨不会自动重建（因为 timeline 不会变）。
+   * 由外部注入每阶段响指次数；触发 buffer 重建（下次 startSnapSource 用新 snap 时刻）。
+   * 正在播放的源需要外部手动 seek / restart 才会听到新配置（因为 timeline 不会自动重编）。
    */
   setSnapConfig(counts: Record<Phase, number>): void {
     this.snapCounts = { ...counts };
-    // 配置变化 → 清空时刻缓存，让下次重新生成
-    this.cachedSnapTimes = null;
+    // 配置变化 → 让下次重建 buffer 时重新计算 snap 时刻
+    this.snapTrackBuffer = null;
   }
 
   /**
@@ -226,7 +219,8 @@ export class PlaybackEngine {
     }
     // 换源后重建拼接轨（用新源）；保留 elapsed 位置
     if (hadTrack) {
-      this.playSnapTrackFrom(savedElapsed, this.computeSnapWindowSec(savedElapsed));
+      this.snapTrackBuffer = null; // 强制重建（用新 snapBuffer）
+      this.startSnapSource(savedElapsed);
     }
   }
 
@@ -241,7 +235,8 @@ export class PlaybackEngine {
     console.log(`[Engine] setSnapSourceFromArrayBuffer: 解码成功, ${this.snapBuffer.duration.toFixed(2)}s`);
     // 重建拼接轨（用新源）；保留 elapsed 位置
     if (this.snapTrackSource) {
-      this.playSnapTrackFrom(this.elapsed, this.computeSnapWindowSec(this.elapsed));
+      this.snapTrackBuffer = null; // 强制重建
+      this.startSnapSource(this.elapsed);
     }
   }
 
@@ -297,19 +292,6 @@ export class PlaybackEngine {
     return times;
   }
 
-  /** 取 fromMs 之后（含）的 snap 时刻（生成式，仍在 timeline 全长上） */
-  private getPendingSnapTimes(fromMs: number): number[] {
-    if (this.cachedSnapTimes === null) {
-      this.cachedSnapTimes = this.generateSnapTimes();
-    }
-    return this.cachedSnapTimes.filter(t => t >= fromMs);
-  }
-
-  /** 清空 snap 时刻缓存（配置/seed 变化时） */
-  private clearSnapTimeCache(): void {
-    this.cachedSnapTimes = null;
-  }
-
   /** 计算整条 timeline 的总毫秒（用 action+rest duration 累加） */
   private computeTimelineTotalMs(): number {
     let total = 0;
@@ -321,80 +303,74 @@ export class PlaybackEngine {
   }
 
   /**
-   * 计算响指拼接轨窗口（秒）
-   * - 默认 SNAP_TRACK_WINDOW_SEC（5min）
-   * - 但不超过 timeline 剩余长度
-   * - 但不超过 SNAP_TRACK_MAX_SEC
+   * 构建一条拼好的整条响指音轨：静音打底，把 snap 样本复制到指定偏移。
+   * - 长度 = 整条 timeline 总长（无上限，内存换稳定性）
+   * - 采样率 = ctx 采样率（与 snapBuffer 一致，音高不变）
+   * - 1 通道 mono
+   * - AudioBuffer 初始全 0 = 静音底版
+   *
+   * 内存估算：20min × 44100Hz × 4B × 1ch ≈ 212MB。可接受。
    */
-  private computeSnapWindowSec(fromMs: number): number {
-    const totalMs = this.computeTimelineTotalMs();
-    const remainingMs = Math.max(0, totalMs - fromMs);
-    const win = Math.min(
-      PlaybackEngine.SNAP_TRACK_WINDOW_SEC,
-      remainingMs / 1000,
-      PlaybackEngine.SNAP_TRACK_MAX_SEC
-    );
-    return Math.max(0.1, win);
-  }
-
-  /**
-   * 构建一条拼好的响指音轨：静音打底，把 snap 样本复制到指定偏移。
-   * 返回 AudioBuffer（采样率 SNAP_TRACK_SR，1 通道）。
-   * - 长度按 windowSec 截断
-   * - 偏移按 fromMs 算相对位置
-   * - 没有 snap 嵌入需求时也返回纯静音（用于 stop+resume 重启）
-   */
-  private buildSnapTrack(fromMs: number, windowSec: number): AudioBuffer | null {
+  private buildSnapTrackBuffer(): AudioBuffer | null {
     if (!this.ctx || !this.snapBuffer) return null;
-    const sr = this.ctx.sampleRate; // 必须与 snapBuffer.sampleRate 一致，否则 snap 变调变慢
-    const dur = Math.max(0.1, windowSec);
-    const totalSamples = Math.ceil(dur * sr);
+    const sr = this.ctx.sampleRate;
+    const totalMs = this.computeTimelineTotalMs();
+    const totalSamples = Math.max(1, Math.ceil(totalMs / 1000 * sr));
     const track = this.ctx.createBuffer(1, totalSamples, sr);
     const data = track.getChannelData(0);
 
-    // 静音已经默认（AudioBuffer 初始 0），只需在 snap 偏移处叠加样本
-    const times = this.getPendingSnapTimes(fromMs);
+    const times = this.generateSnapTimes();
     const snapData = this.snapBuffer.getChannelData(0);
     let placed = 0;
     for (const t of times) {
-      const localSec = (t - fromMs) / 1000;
-      if (localSec < 0 || localSec >= windowSec) continue;
-      placeSnapIntoTrack(data, snapData, localSec, sr);
+      if (t >= totalMs) continue; // 超出 timeline 范围的不嵌（防御性）
+      const offsetSample = Math.floor(t / 1000 * sr);
+      if (offsetSample >= totalSamples) continue;
+      const end = Math.min(totalSamples, offsetSample + snapData.length);
+      for (let i = offsetSample; i < end; i++) {
+        data[i] += snapData[i - offsetSample];
+      }
       placed++;
     }
-    if (placed > 0) console.log(`[Snap] 拼接轨已生成: 长度=${dur.toFixed(1)}s, snap=${placed}, fromMs=${fromMs}`);
+    console.log(`[Snap] 拼接轨已生成: 长度=${(totalMs/1000).toFixed(1)}s, snap=${placed}, sampleRate=${sr}`);
     return track;
   }
 
   /**
-   * 启动或重启响指轨播放：从 fromMs 位置开始
+   * 启动或重启响指轨 source：从 offsetMs 位置开始
    * - 停掉旧 source
-   * - 重新生成 windowSec 长度的拼接轨
-   * - 用单个 BufferSource.start(0, 0) 播放，ctx 内部 sample-accurate
-   * - 不可能"立刻响指"：start(0, 0) 从 buffer 头开始；若旧 source 还在响，先 stop
+   * - 复用/重建 buffer
+   * - 单个 BufferSource.start(0, offsetSec)，ctx 内部 sample-accurate
+   * - 关键不变量：offsetSec ∈ [0, buffer.duration)，Web Audio 物理上不可能"在过去时间播放"
+   * - 如果 offsetMs >= buffer.duration（已超 timeline 末尾），不启动 source（用户听不见响指）
    */
-  private playSnapTrackFrom(fromMs: number, windowSec: number): void {
+  private startSnapSource(offsetMs: number): void {
     if (!this.ctx || !this.snapBuffer) return;
-    this.stopSnapTrack();
+    if (!this.snapTrackBuffer) {
+      this.snapTrackBuffer = this.buildSnapTrackBuffer();
+    }
+    if (!this.snapTrackBuffer) return;
+
+    // offsetSec 必须 < buffer.duration，否则 start() 抛 InvalidStateError
+    const bufferDurSec = this.snapTrackBuffer.duration;
+    const offsetSec = Math.max(0, Math.min(offsetMs / 1000, bufferDurSec - 0.001));
+
+    this.stopSnapSource();
     if (!this.snapMasterGain) {
       this.snapMasterGain = this.ctx.createGain();
       this.snapMasterGain.gain.value = this.snapVolume;
       this.snapMasterGain.connect(this.ctx.destination);
     }
-    const track = this.buildSnapTrack(fromMs, windowSec);
-    if (!track) return;
-    this.snapTrackBuffer = track;
-    this.snapTrackBufferDurationSec = track.duration;
-    this.snapTrackBufferStartSec = this.ctx.currentTime;
+
     const src = this.ctx.createBufferSource();
-    src.buffer = track;
+    src.buffer = this.snapTrackBuffer;
     src.connect(this.snapMasterGain);
-    try { src.start(0, 0); } catch {}
+    try { src.start(0, offsetSec); } catch {}
     this.snapTrackSource = src;
   }
 
-  /** 停掉正在响的响指轨 source（保留 buffer 以便 stopSnapTrackAndKeep 复用） */
-  private stopSnapTrack(): void {
+  /** 停掉响指轨 source（保 buffer；resume 时从 elapsedBeforePause 重启） */
+  private stopSnapSource(): void {
     if (this.snapTrackSource) {
       try { this.snapTrackSource.stop(); } catch {}
       try { this.snapTrackSource.disconnect(); } catch {}
@@ -402,17 +378,16 @@ export class PlaybackEngine {
     }
   }
 
-  /** 完全清掉缓冲（destroy/换源时） */
+  /** 释放全部响指资源（destroy 时） */
   private disposeSnapTrack(): void {
-    this.stopSnapTrack();
+    this.stopSnapSource();
     this.snapTrackBuffer = null;
-    this.snapTrackBufferDurationSec = 0;
-    this.snapTrackBufferStartSec = 0;
+    this.snapMasterGain = null;
   }
 
-  /** 兼容老调用名（pause/seek/stop 处） */
+  /** 旧名 alias（pause/seek/stop/destroy 处可能用到） */
   private clearSnapSources(): void {
-    this.stopSnapTrack();
+    this.stopSnapSource();
   }
 
   /** 注册 UI 更新回调 */
@@ -449,12 +424,10 @@ export class PlaybackEngine {
     this.startTime = this.ctx.currentTime;
     // 启动时锁定一次 seed（之后 pause/resume/seek 复用），保证听感稳定
     this.snapSeed = (Date.now() & 0xffffffff) >>> 0;
-    this.cachedSnapTimes = null;
 
-    // 启动响指拼接轨：从 0 起，窗口 = 整条 timeline 长度（截到 MAX）
-    const totalMs = this.computeTimelineTotalMs();
-    const windowSec = Math.min(totalMs / 1000, PlaybackEngine.SNAP_TRACK_MAX_SEC);
-    this.playSnapTrackFrom(0, Math.max(0.1, windowSec));
+    // 启动响指拼接轨：单轨一条，从 0 开始，自动播到底
+    this.snapTrackBuffer = null; // 强制重建（start 期间不重用）
+    this.startSnapSource(0);
 
     this.scheduleLoop();
     this.timerId = setInterval(() => this.scheduleLoop(), SCHEDULE_INTERVAL_MS);
@@ -478,9 +451,8 @@ export class PlaybackEngine {
     this.isPaused = false;
     this.startTime = this.ctx.currentTime - this.elapsedBeforePause;
     this.pausedAt = null;
-    // 恢复：从 elapsedBeforePause 起，按窗口长度重启拼接轨
-    const windowSec = this.computeSnapWindowSec(this.elapsedBeforePause * 1000);
-    this.playSnapTrackFrom(this.elapsedBeforePause * 1000, windowSec);
+    // 恢复：单轨 source 从 elapsedBeforePause 位置继续
+    this.startSnapSource(this.elapsedBeforePause * 1000);
     this.scheduleLoop();
     this.timerId = setInterval(() => this.scheduleLoop(), SCHEDULE_INTERVAL_MS);
     this.emitUpdate();
@@ -498,9 +470,8 @@ export class PlaybackEngine {
     this.pausedAt = null;
     this.isPaused = false;
     this.isRunning = true;
-    // seek：从 targetMs 起重新生成拼接轨（窗口保持 SNAP_TRACK_WINDOW_SEC）
-    const windowSec = this.computeSnapWindowSec(targetMs);
-    this.playSnapTrackFrom(targetMs, windowSec);
+    // seek：单轨 source 从 targetMs 位置继续（buffer 复用；不会"立刻响指"）
+    this.startSnapSource(targetMs);
     this.scheduleLoop();
     this.timerId = setInterval(() => this.scheduleLoop(), SCHEDULE_INTERVAL_MS);
     if (wasPaused) {
@@ -544,16 +515,8 @@ export class PlaybackEngine {
     const elapsedMs = (now - this.startTime) * 1000;
     this.totalElapsedMs = elapsedMs;
 
-    // ---- 响指轨窗口滑动：剩余 < 1min 时提前重建下一窗口，避免 snap 缺失 ----
-    if (this.snapTrackBuffer && this.snapTrackBufferDurationSec > 0) {
-      const trackEndMs = (this.snapTrackBufferStartSec + this.snapTrackBufferDurationSec - this.ctx.currentTime) * 1000;
-      if (trackEndMs < 60_000 && !this.isPaused) {
-        const winSec = this.computeSnapWindowSec(elapsedMs);
-        if (winSec > 0.1) {
-          this.playSnapTrackFrom(elapsedMs, winSec);
-        }
-      }
-    }
+    // 响指轨：单条 source 自动播到底，无需在 scheduleLoop 续接
+    // （如果 elapsed 已超轨长，源已自然结束，不会有任何 snap）
 
     let accumulatedMs = 0;
     let foundCurrent = false;
@@ -805,22 +768,6 @@ export class PlaybackEngine {
     }
   }
 
-  /** 播放打响指 */
-  playSnap(): void {
-    console.log(`[playSnap] ctx=${!!this.ctx} snapBuffer=${!!this.snapBuffer} snapVolume=${this.snapVolume} ctxState=${this.ctx?.state}`);
-    if (!this.ctx || !this.snapBuffer) return;
-    // 强制恢复 AudioContext（iOS 可能在不交互时挂起）
-    this.ctx.resume().catch(() => {});
-    const src = this.ctx.createBufferSource();
-    src.buffer = this.snapBuffer;
-    const gain = this.ctx.createGain();
-    gain.gain.value = this.snapVolume;
-    src.connect(gain);
-    gain.connect(this.ctx.destination);
-    src.start(0);
-    console.log(`[playSnap] src.start(0) called, bufferDuration=${this.snapBuffer.duration.toFixed(2)}s`);
-  }
-
   /** 播放主观打点风铃音 */
   playExcitementDing(): void {
     if (!this.ctx || !this.excitementBuffer) return;
@@ -911,12 +858,10 @@ export class PlaybackEngine {
 
     newTimeline.push({ type: 'end' });
     this.timeline = newTimeline;
-    this.cachedSnapTimes = null; // timeline 变了，snap 时刻需重新生成
 
     // 重建响指拼接轨以匹配新 timeline，并保持当前播放位置
-    this.clearSnapSources();
-    const winSec = this.computeSnapWindowSec(this.elapsed);
-    this.playSnapTrackFrom(this.elapsed, winSec);
+    this.snapTrackBuffer = null; // 强制重建（新 timeline → 新 snap 时刻）
+    this.startSnapSource(this.elapsed);
 
     // 震动保护
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -993,12 +938,10 @@ export class PlaybackEngine {
 
     newTimeline.push({ type: 'end' });
     this.timeline = newTimeline;
-    this.cachedSnapTimes = null; // timeline 变了，snap 时刻需重新生成
 
     // 重建响指拼接轨以匹配新 timeline，并保持当前播放位置
-    this.clearSnapSources();
-    const winSec2 = this.computeSnapWindowSec(this.elapsed);
-    this.playSnapTrackFrom(this.elapsed, winSec2);
+    this.snapTrackBuffer = null; // 强制重建（新 timeline → 新 snap 时刻）
+    this.startSnapSource(this.elapsed);
 
     // 震动保护
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
