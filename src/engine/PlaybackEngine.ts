@@ -121,8 +121,10 @@ export class PlaybackEngine {
   private snapSeed: number | null = null;
   private cachedSnapTimes: number[] | null = null;
 
-  // 拼接轨采样率（snap 是短促点击，22050 足够，省一半内存）
-  private static readonly SNAP_TRACK_SR = 22050;
+  // 拼接轨采样率 = ctx 采样率（与 snapBuffer / voices 一致）
+  // 关键：buildSnapTrack 中用 this.ctx.sampleRate，不能写死成 22050
+  //   —— 否则会把 44100Hz 的 snap 拉伸成 1/2 速度 + 降 1 个八度
+  // 内存：5min × 44100Hz × 4B × 1ch ≈ 52.9MB，可接受
   // 拼接轨最大长度（秒）。超过此长度的 timeline 只在开头生成 snap
   private static readonly SNAP_TRACK_MAX_SEC = 60 * 60; // 1h
   // 拼接轨覆盖窗口（秒）：trigger* 重建时只覆盖未来这么多
@@ -344,7 +346,7 @@ export class PlaybackEngine {
    */
   private buildSnapTrack(fromMs: number, windowSec: number): AudioBuffer | null {
     if (!this.ctx || !this.snapBuffer) return null;
-    const sr = PlaybackEngine.SNAP_TRACK_SR;
+    const sr = this.ctx.sampleRate; // 必须与 snapBuffer.sampleRate 一致，否则 snap 变调变慢
     const dur = Math.max(0.1, windowSec);
     const totalSamples = Math.ceil(dur * sr);
     const track = this.ctx.createBuffer(1, totalSamples, sr);
