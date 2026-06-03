@@ -518,6 +518,8 @@ export class PlaybackEngine {
     const bpm = item.bpm;
     const intervalMs = 60000 / bpm;
     const boostStart = endMs - BPM_BOOST_DURATION;
+    const isAlternating = item.pan === 'alternating';
+    let beatIndex = 0;
 
     for (let t = offsetMs; t < endMs; t += intervalMs) {
       let actualInterval = intervalMs;
@@ -526,6 +528,7 @@ export class PlaybackEngine {
       const absTime = this.startTime + t / 1000;
       if (absTime < this.voiceEndTime) {
         if (t >= boostStart) t += actualInterval - intervalMs;
+        beatIndex++;
         continue;
       }
 
@@ -533,24 +536,29 @@ export class PlaybackEngine {
       if (absTime > now && absTime < now + LOOK_AHEAD_MS / 1000) {
         if (!this.scheduledBeats.has(key)) {
           this.scheduledBeats.add(key);
-          this.playBeat(item.sound, absTime, item.volume);
+          // 交错模式: 每拍交替 -1 / 1
+          const pan = isAlternating ? (beatIndex % 2 === 0 ? -1 : 1) : (item.pan as number);
+          this.playBeat(item.sound, absTime, item.volume, pan);
         }
       }
       if (t >= boostStart) t += actualInterval - intervalMs;
+      beatIndex++;
     }
   }
 
   // ---- 音频播放 ----
 
-  private playBeat(sound: SoundType, when: number, volume: number): void {
+  private playBeat(sound: SoundType, when: number, volume: number, pan: number = 0): void {
     if (!this.ctx) return;
     const buf = this.beatBuffers.get(sound);
     if (!buf) return;
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
+    const panner = this.ctx.createStereoPanner();
+    panner.pan.value = pan;
     const gain = this.ctx.createGain();
     gain.gain.value = volume;
-    src.connect(gain).connect(this.ctx.destination);
+    src.connect(panner).connect(gain).connect(this.ctx.destination);
     src.start(when);
     this.onBeatCallback?.();
   }
@@ -720,7 +728,7 @@ export class PlaybackEngine {
       }
     }
     tl.push({ type: 'transition', signal: 'heavy_beats', phase: 'climax' });
-    tl.push({ type: 'action', name: actionName, duration: 43200000, bpm: 135, sound: 'bassdrum', volume: 1.0, phase: 'climax' });
+    tl.push({ type: 'action', name: actionName, duration: 43200000, bpm: 135, sound: 'bassdrum', volume: 1.0, phase: 'climax', pan: 0 });
     tl.push({ type: 'end' });
     this.timeline = tl;
 
@@ -751,9 +759,9 @@ export class PlaybackEngine {
         break;
       }
     }
-    tl.push({ type: 'action', name: afterglowActionName, duration: 60000, bpm: 120, sound: 'heartbeat', volume: 0.9, phase: 'afterglow' });
-    tl.push({ type: 'action', name: '收尾缓冲', duration: 15000, bpm: 20, sound: 'tick', volume: 0.7, phase: 'cooldown' });
-    tl.push({ type: 'action', name: '静默着陆中', duration: 30000, bpm: 1, sound: 'fingertap', volume: 0, phase: 'landing' });
+    tl.push({ type: 'action', name: afterglowActionName, duration: 60000, bpm: 120, sound: 'heartbeat', volume: 0.9, phase: 'afterglow', pan: 0 });
+    tl.push({ type: 'action', name: '收尾缓冲', duration: 15000, bpm: 20, sound: 'tick', volume: 0.7, phase: 'cooldown', pan: 0 });
+    tl.push({ type: 'action', name: '静默着陆中', duration: 30000, bpm: 1, sound: 'fingertap', volume: 0, phase: 'landing', pan: 0 });
     tl.push({ type: 'end' });
     this.timeline = tl;
 

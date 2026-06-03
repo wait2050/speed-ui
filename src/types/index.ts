@@ -45,6 +45,7 @@ export type TimelineItem =
       sound: SoundType;
       volume: number;       // 0-1
       phase: Phase;
+      pan: number | 'alternating';  // -1=全左, 0=双耳, 1=全右, 'alternating'=左右交错
     }
   | {
       type: 'rest';

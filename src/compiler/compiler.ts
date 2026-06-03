@@ -290,6 +290,7 @@ function makeAction(
   sound: SoundType,
   volume: number,
   phase: Phase,
+  pan: number | 'alternating' = 0,
 ): TimelineItem {
   return {
     type: 'action',
@@ -299,6 +300,7 @@ function makeAction(
     sound,
     volume,
     phase,
+    pan,
   };
 }
 

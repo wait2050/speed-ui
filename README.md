@@ -13,14 +13,14 @@
 
 ## 核心模块
 
-| 模块 | 路径 | 职责 |
-|------|------|------|
-| 编译器 | `src/compiler/` | 根据时长/阶段/动作配置生成 Timeline |
-| 播放引擎 | `src/engine/PlaybackEngine.ts` | AudioContext 调度：节拍/语音/响指/信号音 |
-| 响指轨 | PlaybackEngine 内部 | 一整条拼接 AudioBuffer（silence + snap）+ 单源播放，mulberry32 确定性随机 |
-| 音色合成 | `src/audio/sounds.ts` | 6 种节拍音 + 信号音实时合成 |
-| 状态管理 | `src/state/store.ts` | Zustand：播放状态/响指配置/音源持久化 |
-| 音频引擎 | `src/audio/engine.ts` | AudioContext 管理 + 预览/试听 |
+| 模块   | 路径                             | 职责                                                       |
+| ---- | ------------------------------ | -------------------------------------------------------- |
+| 编译器  | `src/compiler/`                | 根据时长/阶段/动作配置生成 Timeline                                  |
+| 播放引擎 | `src/engine/PlaybackEngine.ts` | AudioContext 调度：节拍/语音/响指/信号音                             |
+| 响指轨  | PlaybackEngine 内部              | 一整条拼接 AudioBuffer（silence + snap）+ 单源播放，mulberry32 确定性随机 |
+| 音色合成 | `src/audio/sounds.ts`          | 6 种节拍音 + 信号音实时合成                                         |
+| 状态管理 | `src/state/store.ts`           | Zustand：播放状态/响指配置/音源持久化                                  |
+| 音频引擎 | `src/audio/engine.ts`          | AudioContext 管理 + 预览/试听                                  |
 
 ## 响指功能
 
@@ -32,11 +32,11 @@
 
 ## 命令
 
-| 操作 | 命令 |
-|------|------|
-| 开发 | `npm run dev` |
-| 构建 | `npm run build` |
-| 测试 | `npm test` |
+| 操作    | 命令                                                                                                            |
+| ----- | ------------------------------------------------------------------------------------------------------------- |
+| 开发    | `npm run dev`                                                                                                 |
+| 构建    | `npm run build`                                                                                               |
+| 测试    | `npm test`                                                                                                    |
 | 构建+推送 | `npm run build && rm -rf docs && mv dist docs && git add -A && git commit -m "build" && git push origin main` |
 
 ## 项目结构
@@ -55,3 +55,7 @@ src/
 ├── types/          # 类型定义
 └── styles/         # CSS
 ```
+
+
+
+回退点：`8e129f4` → `git reset --hard 03cc37b` 可回到响指重构完成时的状态。
