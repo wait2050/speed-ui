@@ -5,7 +5,9 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { loadHistory, loadFavorites, removeFavorite, loadPreferences, savePreferences } from '../storage';
 import { formatSec } from '../utils/time';
 import { readImportFile } from '../storage/export';
-import { useAppStore } from '../state/store';
+import {
+  useAppStore, uploadSnapFileToStorage, loadSnapCustomBuffer,
+} from '../state/store';
 import { audioEngine } from '../audio/engine';
 import type { HistoryEntry, Favorite, CompiledSequence, SoundType, SpeedTier } from '../types';
 
@@ -32,6 +34,12 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
   const [prefs, setPrefs] = useState(() => loadPreferences());
   const snapVol = useAppStore((s) => s.snapVolume);
   const setSnapVol = useAppStore((s) => s.setSnapVolume);
+  const snapConfig = useAppStore((s) => s.snapConfig);
+  const setSnapCustomUploaded = useAppStore((s) => s.setSnapCustomUploaded);
+  const resetSnapToDefault = useAppStore((s) => s.resetSnapToDefault);
+  const snapFileInputRef = useRef<HTMLInputElement>(null);
+  const [snapUploadError, setSnapUploadError] = useState<string | null>(null);
+  const [snapUploadBusy, setSnapUploadBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const showHistoryDetail = useAppStore((s) => s.showHistoryDetail);
 
@@ -84,6 +92,38 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [onLoadSequence, onClose]);
 
+  // ---- 自定义响指音源上传 ----
+  const handleSnapFilePick = useCallback(() => {
+    setSnapUploadError(null);
+    snapFileInputRef.current?.click();
+  }, []);
+
+  const handleSnapFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSnapUploadError(null);
+    setSnapUploadBusy(true);
+    try {
+      const { filename, arrayBuffer } = await uploadSnapFileToStorage(file);
+      setSnapCustomUploaded(filename);
+      // 推送到当前正在播放的引擎（如果有）
+      window.dispatchEvent(new CustomEvent('rhythm:snapSource', {
+        detail: { kind: 'custom', arrayBuffer, filename },
+      }));
+    } catch (err: any) {
+      setSnapUploadError(err.message ?? '上传失败');
+    } finally {
+      setSnapUploadBusy(false);
+      if (snapFileInputRef.current) snapFileInputRef.current.value = '';
+    }
+  }, [setSnapCustomUploaded]);
+
+  const handleSnapReset = useCallback(() => {
+    setSnapUploadError(null);
+    resetSnapToDefault();
+    window.dispatchEvent(new CustomEvent('rhythm:snapSource', { detail: { kind: 'default' } }));
+  }, [resetSnapToDefault]);
+
   if (!isOpen) return null;
 
   const tabs: { key: Tab; label: string }[] = [
@@ -126,6 +166,13 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
           accept=".json"
           style={{ display: 'none' }}
           onChange={handleFileChange}
+        />
+        <input
+          ref={snapFileInputRef}
+          type="file"
+          accept="audio/*"
+          style={{ display: 'none' }}
+          onChange={handleSnapFileChange}
         />
         {importError && (
           <p style={{ fontSize: 11, color: '#e94560', padding: '0 20px 8px' }}>{importError}</p>
@@ -241,6 +288,40 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onClose, onLoadSequence }) =>
               </div>
               <input type="range" min={0} max={100} value={snapVol} onChange={e => setSnapVol(parseInt(e.target.value))} style={{ width: '100%' }} />
               <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{snapVol}%</span>
+            </div>
+
+            {/* 自定义响指音源 */}
+            <div style={{ marginBottom: 20, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 16 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginBottom: 8 }}>🎵 响指音源</span>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8, lineHeight: 1.4 }}>
+                当前：{snapConfig.sourceMode === 'custom' && snapConfig.customFilename
+                  ? <><span style={{ color: 'var(--accent)' }}>自定义</span> · {snapConfig.customFilename}</>
+                  : <><span>默认</span> · snap.mp3</>}
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button
+                  className="btn-chip"
+                  onClick={handleSnapFilePick}
+                  disabled={snapUploadBusy}
+                  style={{ fontSize: 11, padding: '5px 12px' }}
+                >
+                  {snapUploadBusy ? '上传中...' : '📎 更换音频'}
+                </button>
+                <button
+                  className="btn-chip"
+                  onClick={handleSnapReset}
+                  disabled={snapUploadBusy || snapConfig.sourceMode === 'default'}
+                  style={{ fontSize: 11, padding: '5px 12px', opacity: snapConfig.sourceMode === 'default' ? 0.4 : 1 }}
+                >
+                  ↺ 恢复默认
+                </button>
+              </div>
+              {snapUploadError && (
+                <p style={{ fontSize: 11, color: '#e94560', marginTop: 6 }}>{snapUploadError}</p>
+              )}
+              <p style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.4 }}>
+                支持 mp3 / wav / ogg，单文件 ≤ 5MB，自动持久化
+              </p>
             </div>
 
             {/* 速度 / 音色 */}

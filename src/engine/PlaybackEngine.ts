@@ -42,6 +42,21 @@ const BASE = import.meta.env.BASE_URL || '/';
 const LOOK_AHEAD_MS = 200;
 const SCHEDULE_INTERVAL_MS = 50;
 
+/**
+ * Mulberry32 — 轻量确定性 PRNG。同一 seed → 同一序列。
+ * 用于响指随机时刻的可重现性：pause/resume 复用首次 seed，避免听感漂移。
+ */
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export class PlaybackEngine {
   // ---- 公开状态（React 只读） ----
   isRunning = false;
@@ -72,6 +87,14 @@ export class PlaybackEngine {
   private snapMasterGain: GainNode | null = null;
   private scheduledSnapSources: AudioBufferSourceNode[] = [];
 
+  // 响指配置：运行期由外部注入；启动时锁定 seed 保持 pause/resume 听感稳定
+  private snapCounts: Record<Phase, number> = {
+    warmup: 0, core: 0, sprint_start: 0, sprint_accel: 0, sprint_peak: 0,
+    climax: 0, afterglow: 0, cooldown: 0, landing: 0,
+  };
+  private snapSeed: number | null = null;
+  private cachedSnapTimes: number[] | null = null;
+
   private currentActionName = '';
   private currentPhase: Phase = 'warmup';
   private currentBpm = 0;
@@ -100,42 +123,146 @@ export class PlaybackEngine {
     this.signalBuffers.set('double_ding', this.makeDing(2));
     this.signalBuffers.set('heavy_beats', this.makeHeavyBeat());
 
-    // 合成打响指音效 → 改为异步加载真实音频
-    // (在 init 末尾 loadSnap() 中加载)
-
     // 合成主观狂热微振风铃音
     this.excitementBuffer = synthesizeExcitementDing();
 
     // 预加载语音 + 响指音频（全部 await 确保 ready 后再播放）
     // 注意：initialized 必须放在 await 之后，避免 start() 在 snapBuffer/voices 还未就绪时跑
-    await Promise.all([this.loadVoices(), this.loadSnap()]);
+    await Promise.all([this.loadVoices(), this.loadDefaultSnap()]);
     this.initialized = true;
   }
 
-  /** 异步加载响指 MP3 */
-  private async loadSnap(): Promise<void> {
-    if (!this.ctx) { console.log('[Engine] loadSnap: ctx 为空'); return; }
+  /** 加载默认 snap.mp3（仅 init 时使用） */
+  private async loadDefaultSnap(): Promise<void> {
+    if (!this.ctx) { console.log('[Engine] loadDefaultSnap: ctx 为空'); return; }
     try {
       const base = import.meta.env.BASE_URL || '/';
       const url = `${base}snap.mp3`;
-      console.log(`[Engine] loadSnap: 加载 ${url}`);
+      console.log(`[Engine] loadDefaultSnap: 加载 ${url}`);
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const arrayBuf = await resp.arrayBuffer();
-      console.log(`[Engine] loadSnap: 下载 ${arrayBuf.byteLength} 字节`);
+      console.log(`[Engine] loadDefaultSnap: 下载 ${arrayBuf.byteLength} 字节`);
       this.snapBuffer = await this.ctx.decodeAudioData(arrayBuf);
-      console.log(`[Engine] loadSnap: 解码成功, ${this.snapBuffer.duration.toFixed(2)}s`);
+      console.log(`[Engine] loadDefaultSnap: 解码成功, ${this.snapBuffer.duration.toFixed(2)}s`);
     } catch (e) {
-      console.warn('[Engine] loadSnap: 加载失败，回退合成', e);
+      console.warn('[Engine] loadDefaultSnap: 加载失败，回退合成', e);
       this.snapBuffer = this.makeSnap();
-      console.log(`[Engine] loadSnap: 合成回退 ${this.snapBuffer.duration.toFixed(2)}s`);
+      console.log(`[Engine] loadDefaultSnap: 合成回退 ${this.snapBuffer.duration.toFixed(2)}s`);
     }
   }
 
   // ---- 响指预调度：每个 snap 独立 BufferSource，按绝对 ctx 时间一次性排进未来 ----
 
   /**
-   * 扫描 timeline，从 fromMs 起把每个 snap 排到 AudioContext 时钟上。
+   * 由外部注入每阶段响指次数（不立即排程；下次 scheduleSnapsFrom 生效）
+   */
+  setSnapConfig(counts: Record<Phase, number>): void {
+    this.snapCounts = { ...counts };
+    // 配置变化 → 清空时刻缓存，让下次重新生成
+    this.cachedSnapTimes = null;
+  }
+
+  /**
+   * 替换 snap 音源；null → 重新加载默认 snap.mp3；非 null → 直接替换。
+   * 已排程的 source 不受影响（继续播放旧源直到自然结束）。
+   */
+  async setSnapSource(buffer: AudioBuffer | null): Promise<void> {
+    if (buffer) {
+      this.snapBuffer = buffer;
+      console.log(`[Engine] setSnapSource: 使用外部 buffer, ${buffer.duration.toFixed(2)}s`);
+      return;
+    }
+    if (!this.ctx) return;
+    try {
+      const base = import.meta.env.BASE_URL || '/';
+      const url = `${base}snap.mp3`;
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const arrayBuf = await resp.arrayBuffer();
+      this.snapBuffer = await this.ctx.decodeAudioData(arrayBuf);
+      console.log(`[Engine] setSnapSource(null): 回退默认 snap.mp3, ${this.snapBuffer.duration.toFixed(2)}s`);
+    } catch (e) {
+      console.warn('[Engine] setSnapSource(null): 默认加载失败, 保持当前 buffer');
+    }
+  }
+
+  /**
+   * 直接从 ArrayBuffer 解码并设为 snap 音源（用于用户上传文件）
+   */
+  async setSnapSourceFromArrayBuffer(arrayBuf: ArrayBuffer): Promise<void> {
+    if (!this.ctx) return;
+    this.snapBuffer = await this.ctx.decodeAudioData(arrayBuf);
+    console.log(`[Engine] setSnapSourceFromArrayBuffer: 解码成功, ${this.snapBuffer.duration.toFixed(2)}s`);
+  }
+
+  /**
+   * 扫描 timeline，根据 snapCounts + snapSeed 随机生成 fromMs 之后的响指绝对毫秒列表。
+   * 同一 timeline + 同一 counts + 同一 seed → 输出确定。
+   */
+  private generateSnapTimes(): number[] {
+    if (this.snapSeed === null) {
+      this.snapSeed = (Date.now() & 0xffffffff) >>> 0;
+    }
+    const rng = mulberry32(this.snapSeed);
+
+    // 累计每个 phase 的 action+rest 总时长（绝对毫秒）
+    const phaseDurations: Map<Phase, { startMs: number; endMs: number }> = new Map();
+    let accMs = 0;
+    let curPhase: Phase | null = null;
+    let segStart = 0;
+    for (const item of this.timeline) {
+      if (item.type === 'end') break;
+      const dur = item.type === 'action' || item.type === 'rest' ? item.duration : 0;
+      const ph: Phase | undefined = (item.type === 'action' || item.type === 'rest') ? item.phase : undefined;
+      if (ph && ph !== curPhase) {
+        if (curPhase !== null) {
+          phaseDurations.set(curPhase, { startMs: segStart, endMs: accMs });
+        }
+        curPhase = ph;
+        segStart = accMs;
+      }
+      accMs += dur;
+    }
+    if (curPhase !== null) {
+      phaseDurations.set(curPhase, { startMs: segStart, endMs: accMs });
+    }
+
+    const times: number[] = [];
+    for (const phaseStr of Object.keys(this.snapCounts) as Phase[]) {
+      const count = this.snapCounts[phaseStr];
+      if (count <= 0) continue;
+      if (phaseStr === 'warmup') continue; // 热身阶段不响应
+      const seg = phaseDurations.get(phaseStr);
+      if (!seg) continue;
+      const totalMs = seg.endMs - seg.startMs;
+      if (totalMs <= 0) continue;
+      const bucket = totalMs / (count + 1);
+      for (let k = 1; k <= count; k++) {
+        const center = bucket * k;
+        const jitter = (rng() - 0.5) * bucket * 0.5;
+        times.push(seg.startMs + center + jitter);
+      }
+    }
+    times.sort((a, b) => a - b);
+    return times;
+  }
+
+  /** 取 fromMs 之后（含）的、尚未在 ctx 时钟上排过的 snap 时刻 */
+  private getPendingSnapTimes(fromMs: number): number[] {
+    if (this.cachedSnapTimes === null) {
+      this.cachedSnapTimes = this.generateSnapTimes();
+    }
+    return this.cachedSnapTimes.filter(t => t >= fromMs);
+  }
+
+  /** 清空 snap 时刻缓存（配置/seed 变化时） */
+  private clearSnapTimeCache(): void {
+    this.cachedSnapTimes = null;
+  }
+
+  /**
+   * 把 fromMs 之后的 snap 时刻一次性排到 AudioContext 时钟上。
    * Web Audio 内部 sample-accurate 调度，无需 JS 轮询。
    */
   private scheduleSnapsFrom(fromMs: number): void {
@@ -148,19 +275,16 @@ export class PlaybackEngine {
     }
     const now = this.ctx.currentTime;
     const startSec = now - fromMs / 1000; // 把 accMs 映射到绝对 ctx 时间
+    const times = this.getPendingSnapTimes(fromMs);
     let scheduled = 0;
-    let accMs = 0;
-    for (const item of this.timeline) {
-      if (item.type === 'snap' && accMs >= fromMs) {
-        const src = this.ctx.createBufferSource();
-        src.buffer = this.snapBuffer;
-        src.connect(this.snapMasterGain);
-        const absTime = Math.max(now, startSec + accMs / 1000);
-        try { src.start(absTime); } catch {}
-        this.scheduledSnapSources.push(src);
-        scheduled++;
-      }
-      if (item.type === 'action' || item.type === 'rest') accMs += item.duration;
+    for (const t of times) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.snapBuffer;
+      src.connect(this.snapMasterGain);
+      const absTime = Math.max(now, startSec + (t - fromMs) / 1000);
+      try { src.start(absTime); } catch {}
+      this.scheduledSnapSources.push(src);
+      scheduled++;
     }
     if (scheduled > 0) console.log(`[Snap] 预排 ${scheduled} 个响指 fromMs=${fromMs}`);
   }
@@ -206,8 +330,11 @@ export class PlaybackEngine {
     this.lastVoiceKey = '';
     this.voiceEndTime = 0;
     this.startTime = this.ctx.currentTime;
+    // 启动时锁定一次 seed（之后 pause/resume/seek 复用），保证听感稳定
+    this.snapSeed = (Date.now() & 0xffffffff) >>> 0;
+    this.cachedSnapTimes = null;
 
-    // 启动响指预调度：把 timeline 里所有 snap 一次性排到 ctx 时钟上
+    // 启动响指预调度：把生成的 snap 时刻一次性排到 ctx 时钟上
     this.scheduleSnapsFrom(0);
 
     this.scheduleLoop();
@@ -650,6 +777,7 @@ export class PlaybackEngine {
 
     newTimeline.push({ type: 'end' });
     this.timeline = newTimeline;
+    this.cachedSnapTimes = null; // timeline 变了，snap 时刻需重新生成
 
     // 重建响指调度以匹配新 timeline，并保持当前播放位置
     this.clearSnapSources();
@@ -730,6 +858,7 @@ export class PlaybackEngine {
 
     newTimeline.push({ type: 'end' });
     this.timeline = newTimeline;
+    this.cachedSnapTimes = null; // timeline 变了，snap 时刻需重新生成
 
     // 重建响指调度以匹配新 timeline，并保持当前播放位置
     this.clearSnapSources();

@@ -1,7 +1,7 @@
 // ============================================================
 // Home — 主页：总时长设定 + 手风琴卡片分组 + 生成编排
 // ============================================================
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useAppStore } from '../state/store';
 import { compileSequence } from '../compiler/compiler';
 import { loadPreferences, savePreferences } from '../storage';
@@ -50,9 +50,22 @@ export const Home: React.FC = () => {
   const [climaxMin, setClimaxMin] = useState(3);
   const [afterglowMin, setAfterglowMin] = useState(1);
 
-  const [snapCounts, setSnapCounts] = useState<Record<string, number>>({
-    core: 2, sprint_start: 1, sprint_accel: 1, sprint_peak: 1, climax: 2, afterglow: 1,
+  const [snapCounts, setSnapCountsState] = useState<Record<string, number>>(() => {
+    return useAppStore.getState().snapConfig.counts;
   });
+
+  // 订阅 store 中的 snapCounts（防止从其他来源修改时不同步）
+  useEffect(() => {
+    const unsub = useAppStore.subscribe((s) => {
+      setSnapCountsState(s.snapConfig.counts);
+    });
+    return unsub;
+  }, []);
+
+  const updateSnapCounts = useCallback((next: Record<string, number>) => {
+    setSnapCountsState(next);
+    useAppStore.getState().setSnapCounts(next as any);
+  }, []);
 
   const togglePhase = useCallback((p: PhaseOption) => {
     setEnabledPhases(prev => {
@@ -75,10 +88,10 @@ export const Home: React.FC = () => {
     dispatchStartCompiling();
     setTimeout(() => {
       const totalMs = prefs.defaultDuration * 1000;
-      const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases }, enabledActions, climaxMin, afterglowMin, snapCounts);
+      const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases }, enabledActions, climaxMin, afterglowMin);
       compilationDone(compiled);
     }, 50);
-  }, [dispatchStartCompiling, compilationDone, prefs, enabledPhases, enabledActions, climaxMin, afterglowMin, snapCounts]);
+  }, [dispatchStartCompiling, compilationDone, prefs, enabledPhases, enabledActions, climaxMin, afterglowMin]);
 
   const handleDurationChange = useCallback((val: number) => {
     const newPrefs = { ...prefs, defaultDuration: val };
@@ -185,7 +198,7 @@ export const Home: React.FC = () => {
                 <button
                   key={n}
                   className={`btn-chip snap-chip ${(snapCounts[key] ?? 0) === n ? 'active' : ''}`}
-                  onClick={() => setSnapCounts(prev => ({ ...prev, [key]: n }))}
+                  onClick={() => updateSnapCounts({ ...snapCounts, [key]: n })}
                 >
                   {n}
                 </button>

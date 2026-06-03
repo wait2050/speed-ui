@@ -36,16 +36,6 @@ export const SequenceList: React.FC<Props> = ({ timeline }) => {
             </div>
           );
         }
-        if (item.type === 'snap') {
-          return (
-            <div key={i} className="seq-item seq-snap">
-              <span className="seq-label">👆 打响指</span>
-              <span className="seq-phase" style={{ fontSize: 10, color: 'rgba(255,255,255,0.15)' }}>
-                {phaseLabels[item.phase] ?? item.phase}
-              </span>
-            </div>
-          );
-        }
         const cls = item.type === 'action' ? 'seq-action' : 'seq-rest';
         const label = item.type === 'action' ? item.name : '休息';
         const dur = formatMs(item.duration);

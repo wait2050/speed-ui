@@ -38,7 +38,7 @@ describe('compileSequence', () => {
     const violations: string[] = [];
 
     for (const item of seq.timeline) {
-      if (item.type === 'end' || item.type === 'transition' || item.type === 'snap') continue;
+      if (item.type === 'end' || item.type === 'transition') continue;
 
       if (item.type === 'action' && (item.phase === 'climax' || item.phase === 'afterglow')) {
         inFinale = true;
@@ -108,18 +108,6 @@ describe('compileSequence', () => {
     expect(phases.has('climax')).toBe(false);
   });
 
-  it('should insert snaps when snapCounts > 0', () => {
-    const seq = compileSequence(20 * 60 * 1000, PREFS, undefined, undefined, undefined, undefined, undefined, { core: 3, sprint_peak: 1 });
-    const snaps = seq.timeline.filter(i => i.type === 'snap');
-    expect(snaps.length).toBeGreaterThanOrEqual(3); // at least core snaps
-  });
-
-  it('should not insert snaps in warmup', () => {
-    const seq = compileSequence(20 * 60 * 1000, PREFS, undefined, undefined, undefined, undefined, undefined, { warmup: 5 });
-    const warmupSnaps = seq.timeline.filter(i => i.type === 'snap' && (i as any).phase === 'warmup');
-    expect(warmupSnaps.length).toBe(0);
-  });
-
   it('should use locked actions when provided', () => {
     const locked = new Map<number, string>();
     locked.set(2, '指腹摩擦'); // Lock the 3rd action (0-indexed)
@@ -138,5 +126,11 @@ describe('compileSequence', () => {
     }
     // Locked action might fall in a disabled phase, but should generally be present
     expect(actionIdx).toBeGreaterThan(2);
+  });
+
+  it('should not include any snap items in timeline (snap is now runtime-generated)', () => {
+    const seq = compileSequence(20 * 60 * 1000, PREFS);
+    const snaps = seq.timeline.filter(i => (i as any).type === 'snap');
+    expect(snaps.length).toBe(0);
   });
 });

@@ -2,7 +2,7 @@
 // Player — 播放器：滑块 + 暂停/停止 + 兴奋打点/高潮冲刺
 // ============================================================
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { useAppStore } from '../state/store';
+import { useAppStore, loadSnapCustomBuffer } from '../state/store';
 import { Timer } from '../components/Timer';
 import { ProgressBar } from '../components/ProgressBar';
 import { PlaybackEngine } from '../engine/PlaybackEngine';
@@ -42,10 +42,12 @@ function markOnboardingComplete(): void {
 // 组件
 // ============================================================
 export const Player: React.FC = () => {
-  const { compiled, reset, subjectiveClimaxTriggered, setSubjectiveClimax, playbackFinished, addExcitementPoint, snapVolume } = useAppStore();
+  const { compiled, reset, subjectiveClimaxTriggered, setSubjectiveClimax, playbackFinished, addExcitementPoint, snapVolume, snapConfig } = useAppStore();
   const engineRef = useRef<PlaybackEngine | null>(null);
   const compiledRef = useRef(compiled);
   compiledRef.current = compiled;
+  const snapConfigRef = useRef(snapConfig);
+  snapConfigRef.current = snapConfig;
 
   useWakeLock(true);
 
@@ -92,7 +94,22 @@ export const Player: React.FC = () => {
     const engine = new PlaybackEngine();
     engineRef.current = engine;
 
-    engine.init().then(() => {
+    engine.init().then(async () => {
+      // 注入响指配置
+      engine.setSnapConfig(snapConfigRef.current.counts);
+
+      // 如果有自定义音源，先尝试解码
+      if (snapConfigRef.current.sourceMode === 'custom') {
+        const buf = loadSnapCustomBuffer();
+        if (buf) {
+          try {
+            await engine.setSnapSourceFromArrayBuffer(buf);
+          } catch (e) {
+            console.warn('[Player] 自定义音源解码失败，使用默认', e);
+          }
+        }
+      }
+
       engine.setSnapVolume(snapVolume / 100);
       engine.setOnUpdate(setDs);
       engine.setOnFinished(playbackFinished);
@@ -123,6 +140,26 @@ export const Player: React.FC = () => {
       cancelAnimationFrame(beatRafRef.current);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- 监听外部音源切换事件（来自 Sidebar） ----
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as
+        | { kind: 'custom'; arrayBuffer: ArrayBuffer; filename: string }
+        | { kind: 'default' };
+      const engine = engineRef.current;
+      if (!engine) return;
+      if (detail.kind === 'custom') {
+        engine.setSnapSourceFromArrayBuffer(detail.arrayBuffer).catch(err => {
+          console.warn('[Player] 自定义音源解码失败', err);
+        });
+      } else {
+        engine.setSnapSource(null);
+      }
+    };
+    window.addEventListener('rhythm:snapSource', handler);
+    return () => window.removeEventListener('rhythm:snapSource', handler);
+  }, []);
 
   // ---- 响指音量同步 ----
   useEffect(() => {

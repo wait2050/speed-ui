@@ -8,16 +8,14 @@ import { loadPreferences } from '../storage';
 import { formatMs } from '../utils/time';
 import type { TimelineItem } from '../types';
 
-/** 从 timeline 中提取动作+休息+响指项及其序号 */
-type PreviewItem = TimelineItem & { type: 'action' | 'rest' | 'snap' };
-function extractItems(timeline: TimelineItem[]): { index: number; item: PreviewItem; isSnap: boolean }[] {
-  const result: { index: number; item: PreviewItem; isSnap: boolean }[] = [];
+/** 从 timeline 中提取动作+休息项及其序号 */
+type PreviewItem = TimelineItem & { type: 'action' | 'rest' };
+function extractItems(timeline: TimelineItem[]): { index: number; item: PreviewItem }[] {
+  const result: { index: number; item: PreviewItem }[] = [];
   let idx = 0;
   for (const item of timeline) {
-    if (item.type === 'snap') {
-      result.push({ index: idx, item, isSnap: true });
-    } else if (item.type === 'action' || item.type === 'rest') {
-      result.push({ index: idx, item, isSnap: false });
+    if (item.type === 'action' || item.type === 'rest') {
+      result.push({ index: idx, item });
       idx++;
     }
   }
@@ -110,17 +108,7 @@ export const Preview: React.FC = () => {
 
       {/* 可编辑序列列表 */}
       <div className="sequence-scroll">
-        {timelineItems.map(({ index, item, isSnap }) => {
-          if (isSnap) {
-            return (
-              <div key={`snap-${index}`} className="edit-action-row snap-row">
-                <div className="edit-action-main">
-                  <span style={{ fontSize: 12, color: 'rgba(255,200,50,0.6)' }}>👆 打响指</span>
-                </div>
-              </div>
-            );
-          }
-
+        {timelineItems.map(({ index, item }) => {
           const act = item as TimelineItem & { type: 'action'; name: string; duration: number };
           const rst = item as TimelineItem & { type: 'rest'; duration: number };
           const isLocked = item.type === 'action' && lockedActions.get(index) === act.name;
