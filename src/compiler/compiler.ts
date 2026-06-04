@@ -31,6 +31,7 @@ export function compileSequence(
   enabledActions?: Set<string>,
   climaxMin?: number,    // 高潮冲刺时长（分钟），默认3
   afterglowMin?: number, // 余韵时长（分钟），默认1
+  restRanges?: Record<string, { min: number; max: number }>, // 各阶段休息范围（秒）
 ): CompiledSequence {
   const timeline: TimelineItem[] = [];
   const enabled = phaseConfig?.enabled ?? new Set(['warmup','core','sprint','climax','afterglow','cooldown'] as const);
@@ -129,9 +130,10 @@ export function compileSequence(
       timeline.push(makeAction(action.name, dur, bpm, prefs.customSounds.slow, WARMUP_VOLUME, 'warmup'));
       filled += dur;
 
-      if (filled + WARMUP_REST <= warmupBudget || filled < warmupBudget - 5000) {
-        timeline.push({ type: 'rest', duration: WARMUP_REST, phase: 'warmup' });
-        filled += WARMUP_REST;
+      const warmupRestMs = restDur('warmup', WARMUP_REST, restRanges);
+      if (filled + warmupRestMs <= warmupBudget || filled < warmupBudget - 5000) {
+        timeline.push({ type: 'rest', duration: warmupRestMs, phase: 'warmup' });
+        filled += warmupRestMs;
       }
       warmupRounds++;
     }
@@ -161,9 +163,10 @@ export function compileSequence(
       timeline.push(makeAction(action.name, dur, bpm, sound, CORE_VOLUME, 'core'));
       filled += dur;
 
-      if (filled + CORE_REST <= coreBudget || filled < coreBudget - 5000) {
-        timeline.push({ type: 'rest', duration: CORE_REST, phase: 'core' });
-        filled += CORE_REST;
+      const coreRestMs = restDur('core', CORE_REST, restRanges);
+      if (filled + coreRestMs <= coreBudget || filled < coreBudget - 5000) {
+        timeline.push({ type: 'rest', duration: coreRestMs, phase: 'core' });
+        filled += coreRestMs;
       }
       coreRounds++;
     }
@@ -184,15 +187,16 @@ export function compileSequence(
       while (filled < third) {
         const action = pickForStage(pickTopFiltered, pickTopFiltered());
         // 为休息预留空间
-        const maxDur = third - filled - SPRINT_REST;
+        const sprintRestMs1 = restDur('sprint_start', SPRINT_REST, restRanges);
+        const maxDur = third - filled - sprintRestMs1;
         const dur = maxDur > 20000
           ? Math.min(randInRange(SPRINT_ACTION_MAX - 10000, SPRINT_ACTION_MAX), maxDur)
           : maxDur;
         if (dur < 10000) break;
         timeline.push(makeAction(action.name, dur, SPRINT_START_BPM, prefs.customSounds.medium, SPRINT_VOLUME, 'sprint_start'));
         filled += dur;
-        timeline.push({ type: 'rest', duration: SPRINT_REST, phase: 'sprint_start' });
-        filled += SPRINT_REST;
+        timeline.push({ type: 'rest', duration: sprintRestMs1, phase: 'sprint_start' });
+        filled += sprintRestMs1;
         sprintRounds++;
       }
     }
@@ -202,15 +206,16 @@ export function compileSequence(
       let filled = 0;
       while (filled < third) {
         const action = pickForStage(pickTopFiltered, pickTopFiltered());
-        const maxDur = third - filled - SPRINT_REST;
+        const sprintRestMs2 = restDur('sprint_accel', SPRINT_REST, restRanges);
+        const maxDur = third - filled - sprintRestMs2;
         const dur = maxDur > 20000
           ? Math.min(randInRange(SPRINT_ACTION_MAX - 10000, SPRINT_ACTION_MAX), maxDur)
           : maxDur;
         if (dur < 10000) break;
         timeline.push(makeAction(action.name, dur, SPRINT_ACCEL_BPM, prefs.customSounds.fast, SPRINT_VOLUME, 'sprint_accel'));
         filled += dur;
-        timeline.push({ type: 'rest', duration: SPRINT_REST, phase: 'sprint_accel' });
-        filled += SPRINT_REST;
+        timeline.push({ type: 'rest', duration: sprintRestMs2, phase: 'sprint_accel' });
+        filled += sprintRestMs2;
         sprintRounds++;
       }
     }
@@ -244,9 +249,10 @@ export function compileSequence(
       }
     }
 
-    // 顶峰→高潮：先休息15s，再给信号
+    // 顶峰→高潮：先休息，再给信号
     if (has('climax')) {
-      timeline.push({ type: 'rest', duration: SPRINT_REST, phase: 'sprint_peak' });
+      const sprintRestPreClimax = restDur('sprint_peak', SPRINT_REST, restRanges);
+      timeline.push({ type: 'rest', duration: sprintRestPreClimax, phase: 'sprint_peak' });
       timeline.push({ type: 'transition', signal: 'heavy_beats', phase: 'climax' });
     }
   } else if (isShortMode && has('climax')) {
@@ -306,6 +312,15 @@ function makeAction(
 
 function randInRange(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+/** 根据 restRanges 或默认值获取休息时长（毫秒） */
+function restDur(phase: string, defaultMs: number, restRanges?: Record<string, { min: number; max: number }>): number {
+  const r = restRanges?.[phase];
+  if (r && r.min > 0 && r.max >= r.min) {
+    return randInRange(r.min * 1000, r.max * 1000);
+  }
+  return defaultMs;
 }
 
 function computeStats(

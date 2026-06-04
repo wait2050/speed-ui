@@ -22,18 +22,6 @@ function extractItems(timeline: TimelineItem[]): { index: number; item: PreviewI
   return result;
 }
 
-/** 将预览序号映射到 timeline 实际下标 */
-function previewToTimelineIdx(timeline: TimelineItem[], previewIdx: number): number {
-  let count = 0;
-  for (let i = 0; i < timeline.length; i++) {
-    if (timeline[i].type === 'action' || timeline[i].type === 'rest') {
-      if (count === previewIdx) return i;
-      count++;
-    }
-  }
-  return -1;
-}
-
 /** 声道模式显示的标签 */
 const PAN_LABELS: Record<string, string> = {
   '0': '🎧 双耳',
@@ -58,38 +46,41 @@ export const Preview: React.FC = () => {
   const [lockedActions, setLockedActions] = useState<Map<number, string>>(new Map());
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [panOverrides, setPanOverrides] = useState<Map<number, number | 'alternating'>>(new Map());
+  const [durationOverrides, setDurationOverrides] = useState<Map<number, number>>(new Map());
 
   const timelineItems = useMemo(() => extractItems(compiled.timeline), [compiled]);
 
+  /** 应用所有覆写到 timeline，返回新 timeline */
+  const applyOverrides = useCallback((tl: TimelineItem[], pans: Map<number, number | 'alternating'>, durs: Map<number, number>): TimelineItem[] => {
+    if (pans.size === 0 && durs.size === 0) return tl;
+    let previewIdx = 0;
+    return tl.map((item): TimelineItem => {
+      if (item.type !== 'action' && item.type !== 'rest') return item;
+      const idx = previewIdx++;
+      if (item.type === 'action' && pans.has(idx)) {
+        return { ...item, pan: pans.get(idx)!, duration: durs.has(idx) ? durs.get(idx)! : item.duration };
+      }
+      if (durs.has(idx)) {
+        return { ...item, duration: durs.get(idx)! };
+      }
+      return item;
+    });
+  }, []);
+
   const handleStart = useCallback(() => {
-    // 将 panOverrides 应用到 timeline 并写回 store
-    const overrides = panOverrides;
-    const hasOverrides = overrides.size > 0;
-    if (hasOverrides) {
-      const newTimeline = compiled.timeline.map((item, i) => {
-        const previewIdx = (() => {
-          let cnt = 0;
-          for (let j = 0; j < i; j++) {
-            if (compiled.timeline[j].type === 'action' || compiled.timeline[j].type === 'rest') cnt++;
-          }
-          return item.type === 'action' ? cnt : -1;
-        })();
-        if (item.type === 'action' && previewIdx >= 0 && overrides.has(previewIdx)) {
-          return { ...item, pan: overrides.get(previewIdx)! };
-        }
-        return item;
-      });
+    const newTimeline = applyOverrides(compiled.timeline, panOverrides, durationOverrides);
+    if (newTimeline !== compiled.timeline) {
       compilationDone({ ...compiled, timeline: newTimeline });
     }
     startPlaying();
-  }, [startPlaying, compiled, compilationDone, panOverrides]);
+  }, [startPlaying, compiled, compilationDone, panOverrides, durationOverrides, applyOverrides]);
 
   const handleRecompile = useCallback(() => {
-    // 重新编译，保留锁定
     const totalMs = totalDuration * 1000;
     const newSeq = compileSequence(totalMs, prefs, lockedActions);
     compilationDone(newSeq);
-    setPanOverrides(new Map()); // 清空声道覆写（新 timeline 下标变了）
+    setPanOverrides(new Map());
+    setDurationOverrides(new Map());
   }, [compilationDone, totalDuration, prefs, lockedActions]);
 
   const handleReset = useCallback(() => {
@@ -121,10 +112,21 @@ export const Preview: React.FC = () => {
     setPanOverrides(prev => {
       const next = new Map(prev);
       if (next.get(actionIdx) === newPan) {
-        next.delete(actionIdx); // 点相同值 = 恢复默认
+        next.delete(actionIdx);
       } else {
         next.set(actionIdx, newPan);
       }
+      return next;
+    });
+  }, []);
+
+  const handleDurationChange = useCallback((previewIdx: number, newSec: number) => {
+    const clamped = Math.max(1, Math.min(600, newSec || 1));
+    setDurationOverrides(prev => {
+      const next = new Map(prev);
+      const ms = clamped * 1000;
+      if (next.get(previewIdx) === ms) return prev;
+      next.set(previewIdx, ms);
       return next;
     });
   }, []);
@@ -176,6 +178,7 @@ export const Preview: React.FC = () => {
           const currentPan = item.type === 'action'
             ? (panOverrides.has(index) ? panOverrides.get(index)! : (act.pan ?? 0))
             : 0;
+          const displayDurMs = durationOverrides.has(index) ? durationOverrides.get(index)! : item.duration;
 
           return (
             <div key={index} className={`edit-action-row ${item.type === 'rest' ? 'rest-row' : ''}`}>
@@ -184,8 +187,13 @@ export const Preview: React.FC = () => {
                   <>
                     <span className="lock-btn" style={{ visibility: 'hidden' }}>🔓</span>
                     <span className="edit-action-name rest-name">休息</span>
-                    <span className="edit-action-dur">{Math.round(rst.duration / 1000)}s</span>
-                    <span className="edit-expand-btn" style={{ visibility: 'hidden' }}>▼</span>
+                    <span className="edit-action-dur">{Math.round(displayDurMs / 1000)}s</span>
+                    <button
+                      className="edit-expand-btn"
+                      onClick={() => setExpandedIdx(isExpanded ? null : index)}
+                    >
+                      {isExpanded ? '▲' : '▼'}
+                    </button>
                   </>
                 ) : (
                   <>
@@ -198,7 +206,7 @@ export const Preview: React.FC = () => {
                     </button>
                     <span className="edit-action-name">{act.name}</span>
                     <span className="edit-action-pan">{PAN_LABELS[String(currentPan)] ?? '🎧'}</span>
-                    <span className="edit-action-dur">{Math.round(act.duration / 1000)}s</span>
+                    <span className="edit-action-dur">{Math.round(displayDurMs / 1000)}s</span>
                     <button
                       className="edit-expand-btn"
                       onClick={() => setExpandedIdx(isExpanded ? null : index)}
@@ -209,32 +217,48 @@ export const Preview: React.FC = () => {
                 )}
               </div>
 
-              {isExpanded && item.type === 'action' && (
+              {isExpanded && (
                 <div className="edit-action-options">
-                  <div className="replace-options">
-                    <span className="replace-label">替换为：</span>
-                    {allActionNames.filter(n => n !== act.name).slice(0, 6).map(name => (
-                      <button
-                        key={name}
-                        className="replace-btn"
-                        onClick={() => handleReplace(index, name)}
-                      >
-                        {name}
-                      </button>
-                    ))}
-                  </div>
-                  {/* 声道模式选择 */}
-                  <div className="pan-options" style={{ marginTop: 8 }}>
-                    <span className="replace-label">声道：</span>
-                    {PAN_OPTIONS.map(opt => (
-                      <button
-                        key={String(opt.value)}
-                        className={`replace-btn ${currentPan === opt.value ? 'active' : ''}`}
-                        onClick={() => handlePanChange(index, opt.value)}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
+                  {item.type === 'action' && (
+                    <div className="replace-options" style={{ marginBottom: 8 }}>
+                      <span className="replace-label">替换为：</span>
+                      {allActionNames.filter(n => n !== act.name).slice(0, 6).map(name => (
+                        <button
+                          key={name}
+                          className="replace-btn"
+                          onClick={() => handleReplace(index, name)}
+                        >
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {/* 声道模式选择（仅动作） */}
+                  {item.type === 'action' && (
+                    <div className="pan-options" style={{ marginBottom: 8 }}>
+                      <span className="replace-label">声道：</span>
+                      {PAN_OPTIONS.map(opt => (
+                        <button
+                          key={String(opt.value)}
+                          className={`replace-btn ${currentPan === opt.value ? 'active' : ''}`}
+                          onClick={() => handlePanChange(index, opt.value)}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {/* 时长输入 */}
+                  <div className="dur-options">
+                    <span className="replace-label">时长（秒）：</span>
+                    <input
+                      type="number"
+                      className="duration-input"
+                      min={item.type === 'action' ? 10 : 3}
+                      max={item.type === 'action' ? 600 : 300}
+                      value={Math.round(displayDurMs / 1000)}
+                      onChange={e => handleDurationChange(index, parseInt(e.target.value) || 1)}
+                    />
                   </div>
                 </div>
               )}
@@ -249,7 +273,7 @@ export const Preview: React.FC = () => {
           开始
         </button>
         <button className="btn-secondary btn-recompile" onClick={handleRecompile}>
-          重新编排（保留锁定）
+          重新编排
         </button>
         <button className="btn-secondary btn-recompile" onClick={handleReset} style={{ flex: 'none', padding: '16px 16px', fontSize: 13 }}>
           放弃

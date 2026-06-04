@@ -54,6 +54,13 @@ export const Home: React.FC = () => {
     return useAppStore.getState().snapConfig.counts;
   });
 
+  // 休息时间范围（秒）
+  const [restRanges, setRestRanges] = useState<Record<string, { min: number; max: number }>>(() => ({
+    warmup: { min: 15, max: 25 },
+    core: { min: 10, max: 20 },
+    sprint: { min: 10, max: 20 },
+  }));
+
   // 订阅 store 中的 snapCounts（防止从其他来源修改时不同步）
   useEffect(() => {
     const unsub = useAppStore.subscribe((s) => {
@@ -83,15 +90,22 @@ export const Home: React.FC = () => {
     });
   }, []);
 
+  const updateRestRange = useCallback((phase: string, field: 'min' | 'max', val: number) => {
+    setRestRanges(prev => ({
+      ...prev,
+      [phase]: { ...prev[phase], [field]: Math.max(3, Math.min(300, val || 3)) },
+    }));
+  }, []);
+
   const handleCompile = useCallback(async () => {
     await audioEngine.init();
     dispatchStartCompiling();
     setTimeout(() => {
       const totalMs = prefs.defaultDuration * 1000;
-      const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases }, enabledActions, climaxMin, afterglowMin);
+      const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases }, enabledActions, climaxMin, afterglowMin, restRanges);
       compilationDone(compiled);
     }, 50);
-  }, [dispatchStartCompiling, compilationDone, prefs, enabledPhases, enabledActions, climaxMin, afterglowMin]);
+  }, [dispatchStartCompiling, compilationDone, prefs, enabledPhases, enabledActions, climaxMin, afterglowMin, restRanges]);
 
   const handleDurationChange = useCallback((val: number) => {
     const newPrefs = { ...prefs, defaultDuration: val };
@@ -106,7 +120,7 @@ export const Home: React.FC = () => {
     <div className="page home-page">
       {/* Hero: 大面积留白渲染情绪 */}
       <div className="home-hero">
-        <h1 className="app-title">节奏按摩</h1>
+        <h1 className="app-title">节奏按摩 <sup className="version-badge">v1.1</sup></h1>
         <p className="home-subtitle">引导器</p>
       </div>
 
@@ -182,6 +196,42 @@ export const Home: React.FC = () => {
           ))}
         </div>
 
+      </SectionCard>
+
+      {/* 休息时间范围 */}
+      <SectionCard title="休息时间范围" badge="秒">
+        <p className="accordion-sub-label">每个阶段每次休息的随机时长范围（最小～最大），单位秒</p>
+        <div className="rest-range-grid">
+          {(['warmup', 'core', 'sprint'] as const).map(phase => {
+            const labels: Record<string, string> = { warmup: '热身', core: '核心', sprint: '冲刺' };
+            const r = restRanges[phase];
+            return (
+              <div key={phase} className="rest-range-group">
+                <span className="phase-mini-label">{labels[phase]}</span>
+                <div className="rest-range-inputs">
+                  <input
+                    type="number"
+                    className="duration-input"
+                    min={3}
+                    max={300}
+                    value={r.min}
+                    onChange={e => updateRestRange(phase, 'min', parseInt(e.target.value) || 3)}
+                  />
+                  <span className="rest-range-sep">~</span>
+                  <input
+                    type="number"
+                    className="duration-input"
+                    min={3}
+                    max={300}
+                    value={r.max}
+                    onChange={e => updateRestRange(phase, 'max', parseInt(e.target.value) || 3)}
+                  />
+                  <span className="rest-range-unit">秒</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </SectionCard>
 
       {/* 响指次数 */}
