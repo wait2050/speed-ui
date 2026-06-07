@@ -52,10 +52,11 @@ export function compileSequence(
     return pool[Math.floor(Math.random() * pool.length)] || ACTION_POOLS.top[0];
   };
   const weightedPickFiltered = () => {
-    const all = filterPool([...ALL_ACTIONS]);
-    if (all.length === 0) return ALL_ACTIONS[0];
+    const corePool = [...ACTION_POOLS.core];
+    const pool = filterPool(corePool);
+    if (pool.length === 0) return corePool[0];
     // 重用原 weightedPick 逻辑
-    return weightedPick(all);
+    return weightedPick(pool);
   };
 
   // 1. 终局序列固定时长（根据开关+用户设定计算）
@@ -167,6 +168,28 @@ export function compileSequence(
       if (filled + coreRestMs <= coreBudget || filled < coreBudget - 5000) {
         timeline.push({ type: 'rest', duration: coreRestMs, phase: 'core' });
         filled += coreRestMs;
+
+        // 如果启用了核心段随机插入热身动作
+        const cfg = prefs.coreInsertWarmup;
+        if (cfg?.enabled && Math.random() * 100 < cfg.probability) {
+          const warmupPool = ACTION_POOLS.warmup;
+          const warmupAct = warmupPool[Math.floor(Math.random() * warmupPool.length)];
+          const minD = typeof cfg.minDur === 'number' ? cfg.minDur : 10;
+          const maxD = typeof cfg.maxDur === 'number' ? cfg.maxDur : 20;
+          const insDur = randInRange(minD * 1000, maxD * 1000);
+
+          const insSound: SoundType = warmupAct.speedTier === 'slow'
+            ? prefs.customSounds.slow
+            : prefs.customSounds.fast;
+          const insBpm = warmupAct.speedTier === 'slow'
+            ? prefs.customBpm.slow
+            : prefs.customBpm.fast;
+
+          if (filled + insDur <= coreBudget) {
+            timeline.push(makeAction(warmupAct.name, insDur, insBpm, insSound, CORE_VOLUME, 'core'));
+            filled += insDur;
+          }
+        }
       }
       coreRounds++;
     }

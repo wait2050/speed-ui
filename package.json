@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "deploy": "npm run build && rm -rf docs && mv dist docs",
+    "deploy:push": "npm run deploy && git add -A && git commit -m \"build: deploy to github pages\" && git push origin main"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.0",

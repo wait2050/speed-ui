@@ -108,6 +108,12 @@ export interface UserPreferences {
     extreme: SoundType;
     cooldown: SoundType;
   };
+  coreInsertWarmup?: {
+    enabled: boolean;
+    probability: number; // 0-100
+    minDur: number | '';
+    maxDur: number | '';
+  };
 }
 
 // --- 历史记录 ---
@@ -178,5 +184,11 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     fast: 'heartbeat',
     extreme: 'bassdrum',
     cooldown: 'tick',
+  },
+  coreInsertWarmup: {
+    enabled: false,
+    probability: 30,
+    minDur: 10,
+    maxDur: 20,
   },
 };

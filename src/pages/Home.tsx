@@ -55,7 +55,7 @@ export const Home: React.FC = () => {
   });
 
   // 休息时间范围（秒）
-  const [restRanges, setRestRanges] = useState<Record<string, { min: number; max: number }>>(() => ({
+  const [restRanges, setRestRanges] = useState<Record<string, { min: number | ''; max: number | '' }>>(() => ({
     warmup: { min: 15, max: 25 },
     core: { min: 10, max: 20 },
     sprint: { min: 10, max: 20 },
@@ -90,11 +90,50 @@ export const Home: React.FC = () => {
     });
   }, []);
 
-  const updateRestRange = useCallback((phase: string, field: 'min' | 'max', val: number) => {
+  const updateRestRange = useCallback((phase: string, field: 'min' | 'max', valStr: string) => {
+    if (valStr === '') {
+      setRestRanges(prev => ({
+        ...prev,
+        [phase]: { ...prev[phase], [field]: '' },
+      }));
+      return;
+    }
+    const val = parseInt(valStr, 10);
+    if (isNaN(val)) return;
     setRestRanges(prev => ({
       ...prev,
-      [phase]: { ...prev[phase], [field]: Math.max(3, Math.min(300, val || 3)) },
+      [phase]: { ...prev[phase], [field]: val },
     }));
+  }, []);
+
+  const handleRestRangeBlur = useCallback((phase: string, field: 'min' | 'max') => {
+    setRestRanges(prev => {
+      const current = prev[phase];
+      let val = current[field];
+      if (val === '') {
+        val = field === 'min' ? 10 : 20;
+      }
+      const clampedVal = Math.max(3, Math.min(300, val));
+      return {
+        ...prev,
+        [phase]: { ...prev[phase], [field]: clampedVal },
+      };
+    });
+  }, []);
+
+  const updateInsertWarmupPref = useCallback((field: 'enabled' | 'probability' | 'minDur' | 'maxDur', val: any) => {
+    setPrefs(prev => {
+      const current = prev.coreInsertWarmup ?? { enabled: false, probability: 30, minDur: 10, maxDur: 20 };
+      const nextPrefs = {
+        ...prev,
+        coreInsertWarmup: {
+          ...current,
+          [field]: val,
+        },
+      };
+      savePreferences(nextPrefs);
+      return nextPrefs;
+    });
   }, []);
 
   const handleCompile = useCallback(async () => {
@@ -102,7 +141,18 @@ export const Home: React.FC = () => {
     dispatchStartCompiling();
     setTimeout(() => {
       const totalMs = prefs.defaultDuration * 1000;
-      const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases }, enabledActions, climaxMin, afterglowMin, restRanges);
+      const cleanedRestRanges = Object.keys(restRanges).reduce((acc, phase) => {
+        const r = restRanges[phase];
+        const minVal = Math.max(3, Math.min(300, typeof r.min === 'number' ? r.min : 10));
+        const maxVal = Math.max(3, Math.min(300, typeof r.max === 'number' ? r.max : 20));
+        acc[phase] = {
+          min: Math.min(minVal, maxVal),
+          max: Math.max(minVal, maxVal),
+        };
+        return acc;
+      }, {} as Record<string, { min: number; max: number }>);
+
+      const compiled = compileSequence(totalMs, prefs, undefined, { enabled: enabledPhases }, enabledActions, climaxMin, afterglowMin, cleanedRestRanges);
       compilationDone(compiled);
     }, 50);
   }, [dispatchStartCompiling, compilationDone, prefs, enabledPhases, enabledActions, climaxMin, afterglowMin, restRanges]);
@@ -215,7 +265,8 @@ export const Home: React.FC = () => {
                     min={3}
                     max={300}
                     value={r.min}
-                    onChange={e => updateRestRange(phase, 'min', parseInt(e.target.value) || 3)}
+                    onChange={e => updateRestRange(phase, 'min', e.target.value)}
+                    onBlur={() => handleRestRangeBlur(phase, 'min')}
                   />
                   <span className="rest-range-sep">~</span>
                   <input
@@ -224,13 +275,93 @@ export const Home: React.FC = () => {
                     min={3}
                     max={300}
                     value={r.max}
-                    onChange={e => updateRestRange(phase, 'max', parseInt(e.target.value) || 3)}
+                    onChange={e => updateRestRange(phase, 'max', e.target.value)}
+                    onBlur={() => handleRestRangeBlur(phase, 'max')}
                   />
                   <span className="rest-range-unit">秒</span>
                 </div>
               </div>
             );
           })}
+        </div>
+      </SectionCard>
+
+      {/* 核心段插入热身动作 */}
+      <SectionCard title="核心段插入热身动作">
+        <p className="accordion-sub-label">核心阶段的每个休息时间过后，有概率随机插入一个热身动作（周围区域摩擦/反复点按）</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
+          {/* 开关 */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span className="phase-mini-label" style={{ fontSize: '13px' }}>启用该功能</span>
+            <input
+              type="checkbox"
+              style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+              checked={prefs.coreInsertWarmup?.enabled ?? false}
+              onChange={e => updateInsertWarmupPref('enabled', e.target.checked)}
+            />
+          </div>
+
+          {(prefs.coreInsertWarmup?.enabled ?? false) && (
+            <>
+              {/* 概率 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span className="phase-mini-label">随机概率</span>
+                  <span style={{ fontSize: '12px', color: 'var(--accent)' }}>{prefs.coreInsertWarmup?.probability ?? 30}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={prefs.coreInsertWarmup?.probability ?? 30}
+                  onChange={e => updateInsertWarmupPref('probability', parseInt(e.target.value))}
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              {/* 时长范围 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span className="phase-mini-label">插入动作时长 (秒)</span>
+                <div className="rest-range-inputs" style={{ marginTop: '4px' }}>
+                  <input
+                    type="number"
+                    className="duration-input"
+                    min={3}
+                    max={120}
+                    value={prefs.coreInsertWarmup?.minDur ?? 10}
+                    onChange={e => {
+                      const val = parseInt(e.target.value);
+                      updateInsertWarmupPref('minDur', isNaN(val) ? '' : val);
+                    }}
+                    onBlur={() => {
+                      const current = prefs.coreInsertWarmup?.minDur;
+                      const val = typeof current === 'number' ? current : 10;
+                      updateInsertWarmupPref('minDur', Math.max(3, Math.min(120, val)));
+                    }}
+                  />
+                  <span className="rest-range-sep">~</span>
+                  <input
+                    type="number"
+                    className="duration-input"
+                    min={3}
+                    max={120}
+                    value={prefs.coreInsertWarmup?.maxDur ?? 20}
+                    onChange={e => {
+                      const val = parseInt(e.target.value);
+                      updateInsertWarmupPref('maxDur', isNaN(val) ? '' : val);
+                    }}
+                    onBlur={() => {
+                      const current = prefs.coreInsertWarmup?.maxDur;
+                      const val = typeof current === 'number' ? current : 20;
+                      updateInsertWarmupPref('maxDur', Math.max(3, Math.min(120, val)));
+                    }}
+                  />
+                  <span className="rest-range-unit">秒</span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </SectionCard>
 

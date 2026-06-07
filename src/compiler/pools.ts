@@ -37,9 +37,7 @@ const STRONG_ACTIONS: ActionDef[] = [
     baseDuration: 50,
     floatRange: 10,
   },
-];
-
-// --- 基础动作 ---
+];// --- 基础动作 ---
 const BASIC_ACTIONS: ActionDef[] = [
   {
     name: '指腹摩擦',
@@ -47,20 +45,6 @@ const BASIC_ACTIONS: ActionDef[] = [
     speedTier: 'slow',
     baseDuration: 50,
     floatRange: 10,
-  },
-  {
-    name: '周围区域摩擦',
-    intensity: 3,
-    speedTier: 'slow',
-    baseDuration: 50,
-    floatRange: 10,
-  },
-  {
-    name: '反复点按',
-    intensity: 3,
-    speedTier: 'fast',
-    baseDuration: 35,
-    floatRange: 5,
   },
 ];
 
@@ -86,6 +70,7 @@ export const ALL_ACTIONS: ActionDef[] = [
   ...TOP_ACTIONS,
   ...STRONG_ACTIONS,
   ...BASIC_ACTIONS,
+  ...WARMUP_ACTIONS,
 ];
 
 export const ACTION_POOLS = {
@@ -93,11 +78,10 @@ export const ACTION_POOLS = {
   strong: STRONG_ACTIONS,
   basic: BASIC_ACTIONS,
   warmup: WARMUP_ACTIONS,         // 热身仅周围区域摩擦+反复点按
-  core: ALL_ACTIONS,              // 核心全部动作
+  core: [...TOP_ACTIONS, ...STRONG_ACTIONS, ...BASIC_ACTIONS],              // 核心全部动作（排除热身专用动作）
   sprint: [...TOP_ACTIONS],       // 冲刺优先最强
   climax: TOP_ACTIONS,            // 高潮固定最强
 } as const;
-
 // --- 编排抽取权重 ---
 // 核心阶段：最强 0.4，次强 0.35，基础 0.25
 export function weightedPick(actions: ActionDef[]): ActionDef {
