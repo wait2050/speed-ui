@@ -1,5 +1,5 @@
 // ============================================================
-// App — 状态驱动页面路由 + 侧边栏
+// App — 状态驱动页面路由 + 侧边栏 + 底部导航
 // ============================================================
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAppStore } from './state/store';
@@ -8,6 +8,8 @@ import { Preview } from './pages/Preview';
 import { Player } from './pages/Player';
 import { Landing } from './pages/Landing';
 import { HistoryDetail } from './pages/HistoryDetail';
+import { HistoryStats } from './pages/HistoryStats';
+import { Settings } from './pages/Settings';
 import { Sidebar } from './components/Sidebar';
 import type { CompiledSequence } from './types';
 import './index.css';
@@ -15,6 +17,7 @@ import './index.css';
 const AppInner: React.FC = () => {
   const { status, compilationDone } = useAppStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'home' | 'history' | 'settings'>('home');
 
   // 页面转场遮罩
   const [transitioning, setTransitioning] = useState(false);
@@ -29,16 +32,20 @@ const AppInner: React.FC = () => {
     }
   }, [status]);
 
-  // 从侧边栏加载编排
+  // 从侧边栏/历史/收藏加载编排
   const handleLoadSequence = useCallback((seq: CompiledSequence) => {
     compilationDone(seq);
   }, [compilationDone]);
 
   const showHamburger = status === 'IDLE' || status === 'READY' || status === 'FINISHED' || status === 'HISTORY_DETAIL';
+  const showBottomNav = status === 'IDLE';
 
   const page = (() => {
     switch (status) {
-      case 'IDLE': return <Home />;
+      case 'IDLE':
+        if (activeTab === 'history') return <HistoryStats />;
+        if (activeTab === 'settings') return <Settings />;
+        return <Home />;
       case 'COMPILING':
         return (
           <div className="page loading-page">
@@ -51,7 +58,8 @@ const AppInner: React.FC = () => {
       case 'PAUSED': return <Player />;
       case 'FINISHED': return <Landing />;
       case 'HISTORY_DETAIL': return <HistoryDetail />;
-      default: return <Home />;
+      default:
+        return <Home />;
     }
   })();
 
@@ -71,7 +79,61 @@ const AppInner: React.FC = () => {
         </button>
       )}
 
-      {page}
+      <div style={{ paddingBottom: showBottomNav ? '72px' : '0' }}>
+        {page}
+      </div>
+
+      {showBottomNav && (
+        <div className="bottom-nav-bar glass-card" style={{
+          position: 'fixed',
+          bottom: '12px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 'calc(100% - 24px)',
+          maxWidth: '480px',
+          height: '60px',
+          display: 'flex',
+          justifyContent: 'space-around',
+          alignItems: 'center',
+          borderRadius: '16px',
+          padding: '0 8px',
+          zIndex: 90,
+          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+          border: '1px solid rgba(255, 255, 255, 0.08)'
+        }}>
+          {([
+            ['home', '⚙️', '编排配置'],
+            ['history', '📊', '历史统计'],
+            ['settings', '🔧', '全局设置']
+          ] as const).map(([tab, icon, label]) => {
+            const isActive = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'none',
+                  border: 'none',
+                  color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  padding: '6px 12px',
+                  borderRadius: '12px',
+                  transition: 'all 0.2s ease',
+                  flex: 1,
+                  transform: isActive ? 'scale(1.05)' : 'scale(1)'
+                }}
+              >
+                <span style={{ fontSize: '18px', marginBottom: '2px' }}>{icon}</span>
+                <span style={{ fontSize: '10px', fontWeight: isActive ? 600 : 400 }}>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <Sidebar
         isOpen={sidebarOpen}

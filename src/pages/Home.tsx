@@ -166,246 +166,277 @@ export const Home: React.FC = () => {
   const presets = [10, 15, 20, 25, 30, 40, 50, 60];
   const minutes = Math.floor(prefs.defaultDuration / 60);
 
+  const [configTab, setConfigTab] = useState<'basic' | 'rules' | 'actions'>('basic');
+
   return (
     <div className="page home-page">
       {/* Hero: 大面积留白渲染情绪 */}
       <div className="home-hero">
-        <h1 className="app-title">节奏按摩 <sup className="version-badge">v1.1</sup></h1>
+        <h1 className="app-title">节奏按摩 <sup className="version-badge">v1.2</sup></h1>
         <p className="home-subtitle">引导器</p>
       </div>
 
-      {/* 时长选择 - 无边框大卡片 */}
-      <section className="glass-card duration-card">
-        <div className="duration-display">
-          <span className="stat-number duration-value">{minutes}</span>
-          <span className="duration-unit">分钟</span>
-        </div>
-        <input
-          type="range"
-          className="duration-slider"
-          min={1}
-          max={60}
-          value={minutes}
-          onChange={e => handleDurationChange(parseInt(e.target.value) * 60)}
-        />
-        <div className="preset-row">
-          {presets.map(p => (
+      {/* 配置子标签页切换 */}
+      <div className="sub-tabs-container glass-card" style={{ display: 'flex', gap: '8px', padding: '6px', borderRadius: '12px', marginBottom: '20px' }}>
+        {(['basic', 'rules', 'actions'] as const).map((tab) => {
+          const labels = { basic: '基础设置', rules: '规则设定', actions: '动作与响指' };
+          const isActive = configTab === tab;
+          return (
             <button
-              key={p}
-              className={`btn-chip ${minutes === p ? 'active' : ''}`}
-              onClick={() => handleDurationChange(p * 60)}
+              key={tab}
+              className={`btn-chip ${isActive ? 'active' : ''}`}
+              style={{ flex: 1, padding: '8px 0', borderRadius: '8px', border: 'none', background: isActive ? 'var(--accent)' : 'transparent', color: isActive ? '#fff' : 'var(--text-secondary)', fontSize: '13px' }}
+              onClick={() => setConfigTab(tab)}
             >
-              {p}′
+              {labels[tab]}
             </button>
-          ))}
-        </div>
-      </section>
+          );
+        })}
+      </div>
 
-      {/* 阶段配置 */}
-      <SectionCard title="阶段配置">
-        <div className="phase-toggles-row">
-          {([
-            ['warmup', '热身'],
-            ['core', '核心'],
-            ['sprint', '冲刺'],
-            ['climax', '高潮'],
-            ['afterglow', '余韵'],
-            ['cooldown', '收尾'],
-          ] as [PhaseOption, string][]).map(([key, label]) => (
-            <button
-              key={key}
-              className={`btn-chip ${enabledPhases.has(key) ? 'active' : ''}`}
-              onClick={() => togglePhase(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="accordion-sub-label">高潮冲刺 {climaxMin} 分钟 · 余韵 {afterglowMin} 分钟</div>
-        <div className="phase-toggles-row">
-          <span className="phase-mini-label">高潮</span>
-          {[1, 2, 3, 4, 5].map(m => (
-            <button
-              key={`c${m}`}
-              className={`btn-chip ${climaxMin === m ? 'active' : ''}`}
-              onClick={() => setClimaxMin(m)}
-            >
-              {m}′
-            </button>
-          ))}
-          <span className="phase-mini-label" style={{ marginLeft: 8 }}>余韵</span>
-          {[1, 2, 3].map(m => (
-            <button
-              key={`a${m}`}
-              className={`btn-chip ${afterglowMin === m ? 'active' : ''}`}
-              onClick={() => setAfterglowMin(m)}
-            >
-              {m}′
-            </button>
-          ))}
-        </div>
-
-      </SectionCard>
-
-      {/* 休息时间范围 */}
-      <SectionCard title="休息时间范围" badge="秒">
-        <p className="accordion-sub-label">每个阶段每次休息的随机时长范围（最小～最大），单位秒</p>
-        <div className="rest-range-grid">
-          {(['warmup', 'core', 'sprint'] as const).map(phase => {
-            const labels: Record<string, string> = { warmup: '热身', core: '核心', sprint: '冲刺' };
-            const r = restRanges[phase];
-            return (
-              <div key={phase} className="rest-range-group">
-                <span className="phase-mini-label">{labels[phase]}</span>
-                <div className="rest-range-inputs">
-                  <input
-                    type="number"
-                    className="duration-input"
-                    min={3}
-                    max={300}
-                    value={r.min}
-                    onChange={e => updateRestRange(phase, 'min', e.target.value)}
-                    onBlur={() => handleRestRangeBlur(phase, 'min')}
-                  />
-                  <span className="rest-range-sep">~</span>
-                  <input
-                    type="number"
-                    className="duration-input"
-                    min={3}
-                    max={300}
-                    value={r.max}
-                    onChange={e => updateRestRange(phase, 'max', e.target.value)}
-                    onBlur={() => handleRestRangeBlur(phase, 'max')}
-                  />
-                  <span className="rest-range-unit">秒</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </SectionCard>
-
-      {/* 核心段插入热身动作 */}
-      <SectionCard title="核心段插入热身动作">
-        <p className="accordion-sub-label">核心阶段的每个休息时间过后，有概率随机插入一个热身动作（周围区域摩擦/反复点按）</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
-          {/* 开关 */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span className="phase-mini-label" style={{ fontSize: '13px' }}>启用该功能</span>
+      {configTab === 'basic' && (
+        <>
+          {/* 时长选择 - 无边框大卡片 */}
+          <section className="glass-card duration-card">
+            <div className="duration-display">
+              <span className="stat-number duration-value">{minutes}</span>
+              <span className="duration-unit">分钟</span>
+            </div>
             <input
-              type="checkbox"
-              style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-              checked={prefs.coreInsertWarmup?.enabled ?? false}
-              onChange={e => updateInsertWarmupPref('enabled', e.target.checked)}
+              type="range"
+              className="duration-slider"
+              min={1}
+              max={60}
+              value={minutes}
+              onChange={e => handleDurationChange(parseInt(e.target.value) * 60)}
             />
-          </div>
+            <div className="preset-row">
+              {presets.map(p => (
+                <button
+                  key={p}
+                  className={`btn-chip ${minutes === p ? 'active' : ''}`}
+                  onClick={() => handleDurationChange(p * 60)}
+                >
+                  {p}′
+                </button>
+              ))}
+            </div>
+          </section>
 
-          {(prefs.coreInsertWarmup?.enabled ?? false) && (
-            <>
-              {/* 概率 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span className="phase-mini-label">随机概率</span>
-                  <span style={{ fontSize: '12px', color: 'var(--accent)' }}>{prefs.coreInsertWarmup?.probability ?? 30}%</span>
-                </div>
+          {/* 阶段配置 */}
+          <SectionCard title="阶段配置">
+            <div className="phase-toggles-row">
+              {([
+                ['warmup', '热身'],
+                ['core', '核心'],
+                ['sprint', '冲刺'],
+                ['climax', '高潮'],
+                ['afterglow', '余韵'],
+                ['cooldown', '收尾'],
+              ] as [PhaseOption, string][]).map(([key, label]) => (
+                <button
+                  key={key}
+                  className={`btn-chip ${enabledPhases.has(key) ? 'active' : ''}`}
+                  onClick={() => togglePhase(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="accordion-sub-label">高潮冲刺 {climaxMin} 分钟 · 余韵 {afterglowMin} 分钟</div>
+            <div className="phase-toggles-row">
+              <span className="phase-mini-label">高潮</span>
+              {[1, 2, 3, 4, 5].map(m => (
+                <button
+                  key={`c${m}`}
+                  className={`btn-chip ${climaxMin === m ? 'active' : ''}`}
+                  onClick={() => setClimaxMin(m)}
+                >
+                  {m}′
+                </button>
+              ))}
+              <span className="phase-mini-label" style={{ marginLeft: 8 }}>余韵</span>
+              {[1, 2, 3].map(m => (
+                <button
+                  key={`a${m}`}
+                  className={`btn-chip ${afterglowMin === m ? 'active' : ''}`}
+                  onClick={() => setAfterglowMin(m)}
+                >
+                  {m}′
+                </button>
+              ))}
+            </div>
+          </SectionCard>
+        </>
+      )}
+
+      {configTab === 'rules' && (
+        <>
+          {/* 休息时间范围 */}
+          <SectionCard title="休息时间范围" badge="秒">
+            <p className="accordion-sub-label">每个阶段每次休息的随机时长范围（最小～最大），单位秒</p>
+            <div className="rest-range-grid">
+              {(['warmup', 'core', 'sprint'] as const).map(phase => {
+                const labels: Record<string, string> = { warmup: '热身', core: '核心', sprint: '冲刺' };
+                const r = restRanges[phase];
+                return (
+                  <div key={phase} className="rest-range-group">
+                    <span className="phase-mini-label">{labels[phase]}</span>
+                    <div className="rest-range-inputs">
+                      <input
+                        type="number"
+                        className="duration-input"
+                        min={3}
+                        max={300}
+                        value={r.min}
+                        onChange={e => updateRestRange(phase, 'min', e.target.value)}
+                        onBlur={() => handleRestRangeBlur(phase, 'min')}
+                      />
+                      <span className="rest-range-sep">~</span>
+                      <input
+                        type="number"
+                        className="duration-input"
+                        min={3}
+                        max={300}
+                        value={r.max}
+                        onChange={e => updateRestRange(phase, 'max', e.target.value)}
+                        onBlur={() => handleRestRangeBlur(phase, 'max')}
+                      />
+                      <span className="rest-range-unit">秒</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </SectionCard>
+
+          {/* 核心段插入热身动作 */}
+          <SectionCard title="核心段插入热身动作">
+            <p className="accordion-sub-label">核心阶段的每个休息时间过后，有概率随机插入一个热身动作（周围区域摩擦/反复点按）</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
+              {/* 开关 */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="phase-mini-label" style={{ fontSize: '13px' }}>启用该功能</span>
                 <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={5}
-                  value={prefs.coreInsertWarmup?.probability ?? 30}
-                  onChange={e => updateInsertWarmupPref('probability', parseInt(e.target.value))}
-                  style={{ width: '100%' }}
+                  type="checkbox"
+                  style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                  checked={prefs.coreInsertWarmup?.enabled ?? false}
+                  onChange={e => updateInsertWarmupPref('enabled', e.target.checked)}
                 />
               </div>
 
-              {/* 时长范围 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span className="phase-mini-label">插入动作时长 (秒)</span>
-                <div className="rest-range-inputs" style={{ marginTop: '4px' }}>
-                  <input
-                    type="number"
-                    className="duration-input"
-                    min={3}
-                    max={120}
-                    value={prefs.coreInsertWarmup?.minDur ?? 10}
-                    onChange={e => {
-                      const val = parseInt(e.target.value);
-                      updateInsertWarmupPref('minDur', isNaN(val) ? '' : val);
-                    }}
-                    onBlur={() => {
-                      const current = prefs.coreInsertWarmup?.minDur;
-                      const val = typeof current === 'number' ? current : 10;
-                      updateInsertWarmupPref('minDur', Math.max(3, Math.min(120, val)));
-                    }}
-                  />
-                  <span className="rest-range-sep">~</span>
-                  <input
-                    type="number"
-                    className="duration-input"
-                    min={3}
-                    max={120}
-                    value={prefs.coreInsertWarmup?.maxDur ?? 20}
-                    onChange={e => {
-                      const val = parseInt(e.target.value);
-                      updateInsertWarmupPref('maxDur', isNaN(val) ? '' : val);
-                    }}
-                    onBlur={() => {
-                      const current = prefs.coreInsertWarmup?.maxDur;
-                      const val = typeof current === 'number' ? current : 20;
-                      updateInsertWarmupPref('maxDur', Math.max(3, Math.min(120, val)));
-                    }}
-                  />
-                  <span className="rest-range-unit">秒</span>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </SectionCard>
+              {(prefs.coreInsertWarmup?.enabled ?? false) && (
+                <>
+                  {/* 概率 */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span className="phase-mini-label">随机概率</span>
+                      <span style={{ fontSize: '12px', color: 'var(--accent)' }}>{prefs.coreInsertWarmup?.probability ?? 30}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={prefs.coreInsertWarmup?.probability ?? 30}
+                      onChange={e => updateInsertWarmupPref('probability', parseInt(e.target.value))}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
 
-      {/* 响指次数 */}
-      <SectionCard title="响指次数" badge={`${Object.values(snapCounts).reduce((a, b) => a + b, 0)} 次`}>
-        <p className="accordion-sub-label">每个阶段随机插入 0-4 次响指（热身阶段除外）</p>
-        <div className="phase-toggles-row snap-toggles">
-          {([
-            ['core', '核心'], ['sprint_start', '起冲'], ['sprint_accel', '加速'],
-            ['sprint_peak', '顶峰'], ['climax', '高潮'], ['afterglow', '余韵'],
-          ] as [string, string][]).map(([key, label]) => (
-            <span key={key} className="snap-group">
-              <span className="snap-label">{label}</span>
-              {[0, 1, 2, 3, 4].map(n => (
+                  {/* 时长范围 */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span className="phase-mini-label">插入动作时长 (秒)</span>
+                    <div className="rest-range-inputs" style={{ marginTop: '4px' }}>
+                      <input
+                        type="number"
+                        className="duration-input"
+                        min={3}
+                        max={120}
+                        value={prefs.coreInsertWarmup?.minDur ?? 10}
+                        onChange={e => {
+                          const val = parseInt(e.target.value);
+                          updateInsertWarmupPref('minDur', isNaN(val) ? '' : val);
+                        }}
+                        onBlur={() => {
+                          const current = prefs.coreInsertWarmup?.minDur;
+                          const val = typeof current === 'number' ? current : 10;
+                          updateInsertWarmupPref('minDur', Math.max(3, Math.min(120, val)));
+                        }}
+                      />
+                      <span className="rest-range-sep">~</span>
+                      <input
+                        type="number"
+                        className="duration-input"
+                        min={3}
+                        max={120}
+                        value={prefs.coreInsertWarmup?.maxDur ?? 20}
+                        onChange={e => {
+                          const val = parseInt(e.target.value);
+                          updateInsertWarmupPref('maxDur', isNaN(val) ? '' : val);
+                        }}
+                        onBlur={() => {
+                          const current = prefs.coreInsertWarmup?.maxDur;
+                          const val = typeof current === 'number' ? current : 20;
+                          updateInsertWarmupPref('maxDur', Math.max(3, Math.min(120, val)));
+                        }}
+                      />
+                      <span className="rest-range-unit">秒</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </SectionCard>
+        </>
+      )}
+
+      {configTab === 'actions' && (
+        <>
+          {/* 响指次数 */}
+          <SectionCard title="响指次数" badge={`${Object.values(snapCounts).reduce((a, b) => a + b, 0)} 次`}>
+            <p className="accordion-sub-label">每个阶段随机插入 0-4 次响指（热身阶段除外）</p>
+            <div className="phase-toggles-row snap-toggles">
+              {([
+                ['core', '核心'], ['sprint_start', '起冲'], ['sprint_accel', '加速'],
+                ['sprint_peak', '顶峰'], ['climax', '高潮'], ['afterglow', '余韵'],
+              ] as [string, string][]).map(([key, label]) => (
+                <span key={key} className="snap-group">
+                  <span className="snap-label">{label}</span>
+                  {[0, 1, 2, 3, 4].map(n => (
+                    <button
+                      key={n}
+                      className={`btn-chip snap-chip ${(snapCounts[key] ?? 0) === n ? 'active' : ''}`}
+                      onClick={() => updateSnapCounts({ ...snapCounts, [key]: n })}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </span>
+              ))}
+            </div>
+          </SectionCard>
+
+          {/* 动作选择 */}
+          <SectionCard title="可选动作" badge={`${enabledActions.size}/7`}>
+            <div className="phase-toggles-row">
+              {ALL_ACTION_NAMES.map(name => (
                 <button
-                  key={n}
-                  className={`btn-chip snap-chip ${(snapCounts[key] ?? 0) === n ? 'active' : ''}`}
-                  onClick={() => updateSnapCounts({ ...snapCounts, [key]: n })}
+                  key={name}
+                  className={`btn-chip action-chip ${enabledActions.has(name) ? 'active' : ''}`}
+                  onClick={() => toggleAction(name)}
                 >
-                  {n}
+                  {name}
                 </button>
               ))}
-            </span>
-          ))}
-        </div>
-      </SectionCard>
-
-      {/* 动作选择 */}
-      <SectionCard title="可选动作" badge={`${enabledActions.size}/7`}>
-        <div className="phase-toggles-row">
-          {ALL_ACTION_NAMES.map(name => (
-            <button
-              key={name}
-              className={`btn-chip action-chip ${enabledActions.has(name) ? 'active' : ''}`}
-              onClick={() => toggleAction(name)}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
-      </SectionCard>
+            </div>
+          </SectionCard>
+        </>
+      )}
 
       {/* CTA 按钮 — 自然流，非固定定位 */}
-      <button className="btn-primary btn-compile-inline" onClick={handleCompile}>
+      <button className="btn-primary btn-compile-inline" onClick={handleCompile} style={{ marginTop: '20px', marginBottom: '40px' }}>
         生成编排
       </button>
 
