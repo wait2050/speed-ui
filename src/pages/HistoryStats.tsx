@@ -69,15 +69,15 @@ export const HistoryStats: React.FC = () => {
       />
 
       {/* Sub Tabs */}
-      <div className="sub-tabs-container glass-card" style={{ display: 'flex', gap: '8px', padding: '6px', borderRadius: '12px', marginBottom: '24px', width: '100%', maxWidth: '600px' }}>
+      <div className="sub-tabs-container glass-card" style={{ display: 'flex', gap: '4px', padding: '4px', borderRadius: '10px', marginBottom: '24px', width: '100%', maxWidth: '600px' }}>
         {(['history', 'favorites', 'stats'] as const).map((sub) => {
-          const labels = { history: '历史记录', favorites: '收藏夹', stats: '使用统计' };
+          const labels = { history: '历史', favorites: '收藏', stats: '统计' };
           const isActive = activeSubTab === sub;
           return (
             <button
               key={sub}
               className={`btn-chip ${isActive ? 'active' : ''}`}
-              style={{ flex: 1, padding: '10px 0', borderRadius: '8px', border: 'none', background: isActive ? 'var(--accent)' : 'transparent', color: isActive ? '#fff' : 'var(--text-secondary)' }}
+              style={{ flex: 1, padding: '8px 0', borderRadius: '6px', border: 'none', background: isActive ? 'var(--accent)' : 'transparent', color: isActive ? '#fff' : 'var(--text-secondary)', fontSize: '12px', fontWeight: 600 }}
               onClick={() => setActiveSubTab(sub)}
             >
               {labels[sub]}

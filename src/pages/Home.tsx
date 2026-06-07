@@ -177,15 +177,15 @@ export const Home: React.FC = () => {
       </div>
 
       {/* 配置子标签页切换 */}
-      <div className="sub-tabs-container glass-card" style={{ display: 'flex', gap: '8px', padding: '6px', borderRadius: '12px', marginBottom: '20px' }}>
+      <div className="sub-tabs-container glass-card" style={{ display: 'flex', gap: '4px', padding: '4px', borderRadius: '10px', marginBottom: '20px', width: '100%', maxWidth: '600px' }}>
         {(['basic', 'rules', 'actions'] as const).map((tab) => {
-          const labels = { basic: '基础设置', rules: '规则设定', actions: '动作与响指' };
+          const labels = { basic: '基础', rules: '规则', actions: '动作' };
           const isActive = configTab === tab;
           return (
             <button
               key={tab}
               className={`btn-chip ${isActive ? 'active' : ''}`}
-              style={{ flex: 1, padding: '8px 0', borderRadius: '8px', border: 'none', background: isActive ? 'var(--accent)' : 'transparent', color: isActive ? '#fff' : 'var(--text-secondary)', fontSize: '13px' }}
+              style={{ flex: 1, padding: '6px 0', borderRadius: '6px', border: 'none', background: isActive ? 'var(--accent)' : 'transparent', color: isActive ? '#fff' : 'var(--text-secondary)', fontSize: '12px', fontWeight: 600 }}
               onClick={() => setConfigTab(tab)}
             >
               {labels[tab]}

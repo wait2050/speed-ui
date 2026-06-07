@@ -79,7 +79,7 @@ const AppInner: React.FC = () => {
         </button>
       )}
 
-      <div style={{ paddingBottom: showBottomNav ? '72px' : '0' }}>
+      <div style={{ height: '100%', width: '100%', overflow: 'hidden', paddingBottom: showBottomNav ? '72px' : '0' }}>
         {page}
       </div>
 
